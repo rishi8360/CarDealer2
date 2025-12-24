@@ -124,28 +124,35 @@ class VehicleFormViewModel(
     }
 
     fun addNewColour(newColour: String) {
+
+        // Optimistic UI update (instant UI response)
+        _colourList.value = _colourList.value + newColour
+
         viewModelScope.launch {
-            // Add the new colour to the list immediately (optimistic update)
-            _colourList.value = _colourList.value + newColour
             try {
                 val result = repository.addColour(newColour)
+
                 if (result.isSuccess) {
-                    // Success - keep the colour in the list
+                    // Success → keep optimistic update
                     println("✅ Added new colour: $newColour")
                 } else {
-                    // If backend save fails, remove from list
+                    // Backend failed → rollback UI
                     _colourList.value = _colourList.value - newColour
-                    _uiState.value = _uiState.value.copy(errorMessage = result.exceptionOrNull()?.message)
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = result.exceptionOrNull()?.message
+                    )
                     println("❌ Failed to add colour: ${result.exceptionOrNull()?.message}")
                 }
+
             } catch (e: Exception) {
-                // If error occurs, remove from list
+                // Exception → rollback UI
                 _colourList.value = _colourList.value - newColour
                 _uiState.value = _uiState.value.copy(errorMessage = e.message)
                 println("❌ Error adding colour: ${e.message}")
             }
         }
     }
+
 
     fun addNewModel(brandId: String, newModel: String) {
         viewModelScope.launch {
@@ -315,7 +322,7 @@ class VehicleFormViewModel(
                 // - Keep Firebase URLs (http/https) as-is
                 // - Upload local URIs (content://, file://) to Firebase Storage
                 val imageStrings = images.map { it.toString() }
-                
+
                 val updatedProduct = Product(
                     brandId = brandId,
                     productId = modelName,

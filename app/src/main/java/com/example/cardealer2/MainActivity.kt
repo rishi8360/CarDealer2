@@ -36,6 +36,7 @@ import com.example.cardealer2.screens.PurchaseVehicleScreen
 import com.example.cardealer2.screens.SellVehicleScreen
 import com.example.cardealer2.screens.PaymentsScreen
 import com.example.cardealer2.screens.EmiDueScreen
+import com.example.cardealer2.screens.transactions.AllTransactionsScreen
 import com.example.cardealer2.ui.theme.CarDealer2Theme
 import java.net.URLDecoder
 
@@ -273,6 +274,10 @@ fun AppNav() {
 
         composable("emi_due") {
             EmiDueScreen(navController = navController)
+        }
+
+        composable("all_transactions") {
+            AllTransactionsScreen(navController = navController)
         }
 
     }

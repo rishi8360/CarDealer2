@@ -3,7 +3,10 @@ package com.example.cardealer2.ViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Broker
+import com.example.cardealer2.data.PersonTransaction
 import com.example.cardealer2.repository.BrokerRepository
+import com.example.cardealer2.repository.TransactionRepository
+import com.google.firebase.firestore.DocumentReference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -137,5 +140,12 @@ class ViewBrokersViewModel : ViewModel() {
                 _isLoading.value = false
             }
         }
+    }
+    
+    /**
+     * Load transactions for a broker
+     */
+    suspend fun loadBrokerTransactions(brokerRef: DocumentReference): Result<List<PersonTransaction>> {
+        return TransactionRepository.getTransactionsByPerson(brokerRef)
     }
 }

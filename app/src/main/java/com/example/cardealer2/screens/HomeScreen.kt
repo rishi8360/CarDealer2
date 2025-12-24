@@ -105,6 +105,14 @@ fun HomeScreen(
                             restoreState = true
                         }
                     },
+                    onAllTransactionsClick = {
+                        scope.launch { drawerState.close() }
+                        navController.navigate("all_transactions") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onCloseDrawer = { scope.launch { drawerState.close() } }
                 )
 
@@ -271,6 +279,7 @@ fun DrawerContent(
     onPurchaseVehicleClick: () -> Unit,
     onCatalogSelection:()->Unit,
     onEmiScheduleClick: () -> Unit,
+    onAllTransactionsClick: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
     Column(
@@ -368,6 +377,12 @@ fun DrawerContent(
             icon = Icons.Default.Payments,
             title = "EMI Schedule",
             onClick = { onEmiScheduleClick() }
+        )
+        
+        DrawerMenuItem(
+            icon = Icons.Default.Receipt,
+            title = "All Transactions",
+            onClick = { onAllTransactionsClick() }
         )
         
     /*    DrawerMenuItem(

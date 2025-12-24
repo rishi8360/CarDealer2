@@ -300,8 +300,9 @@ fun VehicleFormScreen(
                     onAddNewItemAsync = { newColour ->
                         runCatching {
                             viewModel.addNewColour(newColour)
-                            colour = newColour
-                        }.isSuccess
+                            colour = newColour}
+                            .isSuccess
+
                     },
                     itemToString = { it },
                     onExpandedChange = { expanded -> isDropdownExpanded = expanded }

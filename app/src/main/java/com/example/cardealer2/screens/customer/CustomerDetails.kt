@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -33,6 +34,8 @@ import com.example.cardealer2.ViewModel.ViewCustomersViewModel
 import androidx.compose.runtime.LaunchedEffect
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.EditActionButton
+import com.example.cardealer2.components.TransactionSection
+import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun CustomerDetailsScreen(
@@ -45,9 +48,6 @@ fun CustomerDetailsScreen(
     val context = LocalContext.current
 
     var selectedImageUrl by remember { mutableStateOf<String?>(null) }
-
-    // Note: No need to manually load customers - Firebase listener in repository automatically updates StateFlow
-    // The customer will automatically appear in the StateFlow when it's updated in Firestore
 
     Scaffold(
         topBar = {
@@ -96,30 +96,32 @@ fun CustomerDetailsScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Profile Photo Section
+                // Profile Card - Photo on left, details on right
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Profile Photo - Left side
                         val imageUrl = customer.photoUrl.firstOrNull()
                         Box(
                             modifier = Modifier
-                                .size(120.dp)
+                                .size(80.dp)
                                 .clip(CircleShape)
                                 .border(
-                                    width = 3.dp,
+                                    width = 2.dp,
                                     color = MaterialTheme.colorScheme.primary,
                                     shape = CircleShape
                                 )
@@ -147,115 +149,87 @@ fun CustomerDetailsScreen(
                                     Icon(
                                         imageVector = Icons.Default.Person,
                                         contentDescription = null,
-                                        modifier = Modifier.size(60.dp),
+                                        modifier = Modifier.size(40.dp),
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = customer.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                // Contact Information Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "Contact Information",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-
-                        Divider()
-
-                        // Phone
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Customer Details - Right side
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Call,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                            // Name
+                            Text(
+                                text = customer.name,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = "Phone Number",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                            // Phone
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Call,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
                                 Text(
                                     text = customer.phone,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        // Address
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
-                                Text(
-                                    text = "Address",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 14.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    text = customer.address.ifBlank { "No address provided" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
+                            }
+
+                            // Address (if available)
+                            if (customer.address.isNotBlank()) {
+                                Row(
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Home,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = customer.address,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 14.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Amount Card
+                // Amount Card - Compact design
                 val owesCustomer = customer.amount < 0
                 val amountText = "₹${kotlin.math.abs(customer.amount)}"
-                val amountLabel = if (owesCustomer) "Amount to Give (You Owe)" else "Amount to Receive (They Owe)"
+                val amountLabel = if (owesCustomer) "You Owe" else "They Owe"
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (owesCustomer)
-                            Color(0xFFFFE5E5) // soft red background for expense
+                            Color(0xFFFFE5E5) // soft red background
                         else
-                            Color(0xFFE8F9E9) // soft green background for income
+                            Color(0xFFE8F9E9) // soft green background
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
@@ -266,34 +240,39 @@ fun CustomerDetailsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Text(
                                 text = amountLabel,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 13.sp
+                                ),
                                 color = if (owesCustomer)
-                                    Color(0xFFB71C1C) // deep red text
+                                    Color(0xFFB71C1C)
                                 else
-                                    Color(0xFF1B5E20) // deep green text
+                                    Color(0xFF1B5E20)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = amountText,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 28.sp
+                                ),
                                 color = if (owesCustomer)
-                                    Color(0xFFD32F2F) // strong red for emphasis
+                                    Color(0xFFD32F2F)
                                 else
-                                    Color(0xFF2E7D32) // strong green for emphasis
+                                    Color(0xFF2E7D32)
                             )
                         }
 
                         Surface(
                             shape = CircleShape,
                             color = if (owesCustomer)
-                                Color(0xFFD32F2F) // deep red circle
+                                Color(0xFFD32F2F)
                             else
-                                Color(0xFF2E7D32), // deep green circle
-                            modifier = Modifier.size(56.dp)
+                                Color(0xFF2E7D32),
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
@@ -301,15 +280,73 @@ fun CustomerDetailsScreen(
                             ) {
                                 Text(
                                     text = "₹",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
                                 )
                             }
                         }
                     }
                 }
 
+                // Contact Information Card (only if address is blank above)
+                if (customer.address.isBlank()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Contact Information",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                ),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            HorizontalDivider()
+
+                            Row(
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Address",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "No address provided",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 14.sp
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // ID Proof Card
                 Card(
@@ -324,53 +361,63 @@ fun CustomerDetailsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
                             text = "Identity Proof",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            ),
                             color = MaterialTheme.colorScheme.primary
                         )
 
-                        Divider()
+                        HorizontalDivider()
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Badge,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
                                 Text(
                                     text = customer.idProofType.ifBlank { "Not specified" },
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp
+                                    ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = customer.idProofNumber.ifBlank { "Not provided" },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
                                 )
                             }
                         }
 
                         if (customer.idProofImageUrls.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+
                             Text(
                                 text = "Documents",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp
+                                ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 customer.idProofImageUrls.forEachIndexed { index, url ->
-                                    // PDF Document Card
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -389,26 +436,30 @@ fun CustomerDetailsScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                                .padding(14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.PictureAsPdf,
                                                 contentDescription = "PDF Document",
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                modifier = Modifier.size(40.dp)
+                                                modifier = Modifier.size(32.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(16.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = "ID Proof Document ${index + 1}",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Medium,
+                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                        fontWeight = FontWeight.Medium,
+                                                        fontSize = 14.sp
+                                                    ),
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                                 )
                                                 Text(
                                                     text = "Tap to open PDF",
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        fontSize = 12.sp
+                                                    ),
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                                                 )
                                             }
@@ -419,6 +470,20 @@ fun CustomerDetailsScreen(
                         }
                     }
                 }
+
+                // Transaction History Section
+                val customerRef = remember(customerId) {
+                    FirebaseFirestore.getInstance().collection("Customer").document(customerId)
+                }
+
+                TransactionSection(
+                    personRef = customerRef,
+                    personName = customer.name,
+                    onLoadTransactions = { ref ->
+                        viewModel.loadCustomerTransactions(ref)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

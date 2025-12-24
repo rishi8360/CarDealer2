@@ -564,11 +564,22 @@ object VehicleRepository {
                 .get()
                 .await()
 
+            // If document doesn't exist, return empty list
+            if (!document.exists()) {
+                return Result.success(emptyList())
+            }
+
             val colours = document.get("colour") as? List<String> ?: emptyList()
             Result.success(colours)
 
         } catch (e: Exception) {
-            Result.failure(e)
+            // If document doesn't exist, return empty list instead of failing
+            if (e.message?.contains("NOT_FOUND") == true || 
+                e.message?.contains("No document to update") == true) {
+                Result.success(emptyList())
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
@@ -577,10 +588,25 @@ object VehicleRepository {
             val colourDocRef = db.collection("Colour")
                 .document("unfVwvmNspz7mhoyGz9z")
 
-            // Add the new colour to the existing array
-            colourDocRef.update("colour", FieldValue.arrayUnion(newColour)).await()
+            // Try to update the existing array
+            try {
+                colourDocRef.update("colour", FieldValue.arrayUnion(newColour)).await()
+                println("✅ Successfully added colour: $newColour to Firestore (updated existing document)")
+            } catch (updateError: Exception) {
+                // If document doesn't exist (NOT_FOUND), create it with the new colour
+                if (updateError.message?.contains("NOT_FOUND") == true || 
+                    updateError.message?.contains("No document to update") == true) {
+                    colourDocRef.set(
+                        hashMapOf("colour" to listOf(newColour)),
+                        SetOptions.merge()
+                    ).await()
+                    println("✅ Successfully added colour: $newColour to Firestore (created new document)")
+                } else {
+                    // Re-throw if it's a different error
+                    throw updateError
+                }
+            }
 
-            println("✅ Successfully added colour: $newColour to Firestore")
             Result.success(Unit)
         } catch (e: Exception) {
             println("❌ Error adding colour: ${e.message}")

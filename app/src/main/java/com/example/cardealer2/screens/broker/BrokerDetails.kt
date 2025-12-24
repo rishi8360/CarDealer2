@@ -26,6 +26,8 @@ import com.example.cardealer2.ViewModel.ViewBrokersViewModel
 import androidx.compose.runtime.LaunchedEffect
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.EditActionButton
+import com.example.cardealer2.components.TransactionSection
+import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun BrokerDetailsScreen(
@@ -404,10 +406,25 @@ fun BrokerDetailsScreen(
                         }
                     }
                 }
+                
+                // Transaction History Section
+                val brokerRef = remember(brokerId) {
+                    FirebaseFirestore.getInstance().collection("Broker").document(brokerId)
+                }
+                
+                TransactionSection(
+                    personRef = brokerRef,
+                    personName = broker.name,
+                    onLoadTransactions = { ref ->
+                        viewModel.loadBrokerTransactions(ref)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
 }
+
 
 
 

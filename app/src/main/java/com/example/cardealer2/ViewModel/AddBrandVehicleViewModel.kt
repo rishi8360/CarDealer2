@@ -136,32 +136,33 @@ class AddBrandVehicleViewModel(
         }
     }
 
-    fun addNewColour(newColour: String) {
-        viewModelScope.launch {
-            // Add the new colour to the list immediately (optimistic update)
-            _colourList.value = _colourList.value + newColour
+    suspend fun addNewColour(newColour: String): Boolean {
+        // Add the new colour to the list immediately (optimistic update)
+        _colourList.value = _colourList.value + newColour
 
-            // Save to backend
-            try {
-                val result = repository.addColour(newColour)
-                if (result.isSuccess) {
-                    println("✅ Added new colour: $newColour")
-                } else {
-                    // If backend save fails, remove from list
-                    _colourList.value = _colourList.value - newColour
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Failed to add colour: ${result.exceptionOrNull()?.message}"
-                    )
-                    println("❌ Failed to add colour: ${result.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                // If error occurs, remove from list
+        // Save to backend
+        return try {
+            val result = repository.addColour(newColour)
+            if (result.isSuccess) {
+                println("✅ Added new colour: $newColour")
+                true
+            } else {
+                // If backend save fails, remove from list
                 _colourList.value = _colourList.value - newColour
                 _uiState.value = _uiState.value.copy(
-                    errorMessage = "Error adding colour: ${e.message}"
+                    errorMessage = "Failed to add colour: ${result.exceptionOrNull()?.message}"
                 )
-                println("❌ Error adding colour: ${e.message}")
+                println("❌ Failed to add colour: ${result.exceptionOrNull()?.message}")
+                false
             }
+        } catch (e: Exception) {
+            // If error occurs, remove from list
+            _colourList.value = _colourList.value - newColour
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Error adding colour: ${e.message}"
+            )
+            println("❌ Error adding colour: ${e.message}")
+            false
         }
     }
 

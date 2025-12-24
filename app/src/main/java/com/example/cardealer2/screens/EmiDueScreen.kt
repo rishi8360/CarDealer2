@@ -19,6 +19,9 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Message
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -43,6 +46,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -243,7 +247,7 @@ private fun EmiDueList(
 ) {
     var selectedSale by remember { mutableStateOf<PaymentsViewModel.SaleWithDetails?>(null) }
     var showCustomerDialog by remember { mutableStateOf(false) }
-    var selectedCustomer by remember { mutableStateOf<PaymentsViewModel.CustomerDetails?>(null) }
+    var selectedSaleForDialog by remember { mutableStateOf<PaymentsViewModel.SaleWithDetails?>(null) }
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     val todayStart = remember {
         val cal = java.util.Calendar.getInstance().apply {
@@ -321,7 +325,7 @@ private fun EmiDueList(
                                     if (detail.customer != null) {
                                         IconButton(
                                             onClick = {
-                                                selectedCustomer = detail.customer
+                                                selectedSaleForDialog = detail
                                                 showCustomerDialog = true
                                             },
                                             modifier = Modifier.size(36.dp)
@@ -524,9 +528,9 @@ private fun EmiDueList(
         )
     }
 
-    if (showCustomerDialog && selectedCustomer != null) {
+    if (showCustomerDialog && selectedSaleForDialog != null) {
         CustomerInfoDialog(
-            customer = selectedCustomer,
+            saleWithDetails = selectedSaleForDialog,
             onDismiss = { showCustomerDialog = false }
         )
     }
@@ -553,13 +557,49 @@ private fun openPdf(context: android.content.Context, pdfUrl: String) {
 }
 
 
+
+private fun openWhatsApp(context: android.content.Context, phoneNumber: String, message: String) {
+    try {
+        // Clean phone number - remove spaces, dashes, and ensure it starts with country code
+        val cleanPhone = phoneNumber.replace(Regex("[\\s\\-\\(\\)]"), "")
+        val phoneWithCode = if (cleanPhone.startsWith("+")) cleanPhone else "+91$cleanPhone" // Default to India +91 if no country code
+        
+        // Encode message for URL
+        val encodedMessage = Uri.encode(message)
+        
+        // Create WhatsApp intent
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            data = "https://wa.me/$phoneWithCode?text=$encodedMessage".toUri()
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        
+        // Check if WhatsApp is available
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(intent)
+        } else {
+            // Fallback: open in browser
+            val browserIntent = Intent(Intent.ACTION_VIEW,
+                "https://wa.me/$phoneWithCode?text=$encodedMessage".toUri())
+            context.startActivity(browserIntent)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerInfoDialog(
-    customer: PaymentsViewModel.CustomerDetails?,
+    saleWithDetails: PaymentsViewModel.SaleWithDetails?,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val customer = saleWithDetails?.customer
+    val sale = saleWithDetails?.sale
+    val vehicle = saleWithDetails?.vehicle
+    val emi = sale?.emiDetails
+    
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
@@ -682,7 +722,7 @@ fun CustomerInfoDialog(
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(16.dp))
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Phone Number",
                                         style = MaterialTheme.typography.bodySmall,
@@ -693,6 +733,41 @@ fun CustomerInfoDialog(
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.Medium
                                     )
+                                }
+                                // WhatsApp Button
+                                if (customer.phoneNumber.isNotBlank() && emi != null && emi.remainingInstallments > 0) {
+                                    IconButton(
+                                        onClick = {
+                                            val dueDateText = if (emi.nextDueDate > 0) {
+                                                dateFormatter.format(Date(emi.nextDueDate))
+                                            } else {
+                                                "Not set"
+                                            }
+                                            val totalRemaining = emi.remainingInstallments * emi.installmentAmount
+                                            val message = """
+                                                Hello ${customer.customerName},
+                                                
+                                                This is a reminder about your EMI payment:
+                                                
+                                                Vehicle: ${vehicle?.productId ?: "N/A"}
+                                                Next Due Date: $dueDateText
+                                                EMI Amount: ₹${String.format(Locale.getDefault(), "%.2f", emi.installmentAmount)}
+                                                Remaining Installments: ${emi.remainingInstallments}
+                                                Total Amount Remaining: ₹${String.format(Locale.getDefault(), "%.2f", totalRemaining)}
+                                                
+                                                Please make the payment at your earliest convenience.
+                                                
+                                                Thank you!
+                                            """.trimIndent()
+                                            openWhatsApp(context, customer.phoneNumber, message)
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Message,
+                                            contentDescription = "Send WhatsApp Message",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
 

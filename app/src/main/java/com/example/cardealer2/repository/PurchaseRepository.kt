@@ -4,6 +4,10 @@ import android.util.Log
 import com.example.cardealer2.data.Purchase
 import com.example.cardealer2.data.CapitalTransaction
 import com.example.cardealer2.data.MaxOrderNo
+import com.example.cardealer2.data.PersonTransaction
+import com.example.cardealer2.data.TransactionType
+import com.example.cardealer2.data.PersonType
+import com.example.cardealer2.data.PaymentMethod
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -409,6 +413,146 @@ object PurchaseRepository {
     }
     
     /**
+     * Get current balance for a specific capital type (Cash, Bank, or Credit)
+     */
+    suspend fun getCapitalBalance(type: String): Result<Double> {
+        return try {
+            if (type !in listOf("Cash", "Bank", "Credit")) {
+                return Result.failure(Exception("Invalid capital type. Must be Cash, Bank, or Credit"))
+            }
+            
+            val capitalDocRef = capitalCollection.document(type)
+            val document = capitalDocRef.get().await()
+            
+            if (!document.exists()) {
+                return Result.success(0.0)
+            }
+            
+            val balance = (document.get("balance") as? Long)?.toDouble() 
+                ?: (document.get("balance") as? Double) ?: 0.0
+            
+            Log.d(TAG, "✅ Loaded balance for $type: $balance")
+            Result.success(balance)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error getting capital balance: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Adjust capital balance manually (add or subtract)
+     * Positive amount adds to balance, negative amount subtracts
+     */
+    suspend fun adjustCapitalBalance(
+        type: String,
+        amount: Double,
+        description: String = "Manual Adjustment",
+        reason: String? = null
+    ): Result<Unit> {
+        return try {
+            if (type !in listOf("Cash", "Bank", "Credit")) {
+                return Result.failure(Exception("Invalid capital type. Must be Cash, Bank, or Credit"))
+            }
+            
+            val capitalDocRef = capitalCollection.document(type)
+            
+            val transactionData = hashMapOf<String, Any>(
+                "transactionDate" to System.currentTimeMillis(),
+                "createdAt" to System.currentTimeMillis(),
+                "orderNumber" to 0,
+                "amount" to kotlin.math.abs(amount),
+                "type" to if (amount >= 0) "MANUAL_ADD" else "MANUAL_SUBTRACT",
+                "description" to description
+            )
+            
+            reason?.let {
+                transactionData["reason"] = it
+            }
+            
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(capitalDocRef)
+                val existingTransactions = snapshot.get("transactions") as? List<Map<String, Any>> ?: emptyList()
+                val currentBalance = (snapshot.get("balance") as? Long)?.toDouble() 
+                    ?: (snapshot.get("balance") as? Double) ?: 0.0
+                
+                // Add or subtract amount from balance
+                val newBalance = currentBalance + amount
+                
+                val updatedTransactions = existingTransactions.toMutableList()
+                updatedTransactions.add(transactionData)
+                
+                transaction.set(
+                    capitalDocRef,
+                    mapOf(
+                        "transactions" to updatedTransactions,
+                        "balance" to newBalance
+                    ),
+                    SetOptions.merge()
+                )
+            }.await()
+            
+            Log.d(TAG, "✅ Adjusted $type balance by $amount. New balance: ${getCapitalBalance(type).getOrNull() ?: 0.0}")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error adjusting capital balance: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Set initial capital balance (creates document if doesn't exist)
+     */
+    suspend fun setInitialCapitalBalance(
+        type: String,
+        amount: Double,
+        description: String = "Initial Balance"
+    ): Result<Unit> {
+        return try {
+            if (type !in listOf("Cash", "Bank", "Credit")) {
+                return Result.failure(Exception("Invalid capital type. Must be Cash, Bank, or Credit"))
+            }
+            
+            val capitalDocRef = capitalCollection.document(type)
+            
+            val transactionData = hashMapOf<String, Any>(
+                "transactionDate" to System.currentTimeMillis(),
+                "createdAt" to System.currentTimeMillis(),
+                "orderNumber" to 0,
+                "amount" to amount,
+                "type" to "INITIAL_BALANCE",
+                "description" to description
+            )
+            
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(capitalDocRef)
+                val existingTransactions = snapshot.get("transactions") as? List<Map<String, Any>> ?: emptyList()
+                
+                // If document exists and has balance, don't overwrite - use adjust instead
+                val currentBalance = (snapshot.get("balance") as? Long)?.toDouble() 
+                    ?: (snapshot.get("balance") as? Double) ?: 0.0
+                
+                val updatedTransactions = existingTransactions.toMutableList()
+                updatedTransactions.add(transactionData)
+                
+                transaction.set(
+                    capitalDocRef,
+                    mapOf(
+                        "transactions" to updatedTransactions,
+                        "balance" to amount
+                    ),
+                    SetOptions.merge()
+                )
+            }.await()
+            
+            Log.d(TAG, "✅ Set initial balance for $type: $amount")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error setting initial capital balance: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get all capital transactions for a specific type (Cash, Bank, or Credit)
      */
     suspend fun getCapitalTransactions(type: String): Result<List<CapitalTransaction>> {
@@ -512,6 +656,35 @@ object PurchaseRepository {
     }
     
     /**
+     * Helper function to determine payment method from payment methods map
+     */
+    private fun determinePaymentMethod(paymentMethods: Map<String, String>): String {
+        val cashAmount = paymentMethods["cash"]?.toDoubleOrNull() ?: 0.0
+        val bankAmount = paymentMethods["bank"]?.toDoubleOrNull() ?: 0.0
+        val creditAmount = paymentMethods["credit"]?.toDoubleOrNull() ?: 0.0
+        
+        val nonZeroCount = listOf(cashAmount, bankAmount, creditAmount).count { it > 0 }
+        
+        return when {
+            nonZeroCount > 1 -> PaymentMethod.MIXED
+            cashAmount > 0 -> PaymentMethod.CASH
+            bankAmount > 0 -> PaymentMethod.BANK
+            creditAmount > 0 -> PaymentMethod.CREDIT
+            else -> PaymentMethod.CASH
+        }
+    }
+    
+    /**
+     * Helper function to extract payment amounts from payment methods map
+     */
+    private fun extractPaymentAmounts(paymentMethods: Map<String, String>): Triple<Double, Double, Double> {
+        val cashAmount = paymentMethods["cash"]?.toDoubleOrNull() ?: 0.0
+        val bankAmount = paymentMethods["bank"]?.toDoubleOrNull() ?: 0.0
+        val creditAmount = paymentMethods["credit"]?.toDoubleOrNull() ?: 0.0
+        return Triple(cashAmount, bankAmount, creditAmount)
+    }
+    
+    /**
      * Atomically add purchase with capital transactions AND vehicle in a single transaction
      * This ensures data consistency - either everything succeeds or everything fails
      * 
@@ -530,6 +703,9 @@ object PurchaseRepository {
      * @param brandNameRef BrandNames document reference (optional)
      * @param brokerOrMiddleManRef Broker/Middle Man document reference (optional)
      * @param ownerRef Owner document reference (optional)
+     * @param purchaseType Purchase type: "Direct", "Broker", or "Middle Man" (optional, will be determined from refs if not provided)
+     * @param brokerFee Broker fee amount (optional, for broker fee transactions)
+     * @param brokerFeePaymentMethods Broker fee payment methods map (optional)
      * @return Result with purchase ID on success
      */
     suspend fun addPurchaseWithVehicleAtomic(
@@ -547,7 +723,10 @@ object PurchaseRepository {
         brandDocRef: com.google.firebase.firestore.DocumentReference,
         brandNameRef: com.google.firebase.firestore.DocumentReference?,
         brokerOrMiddleManRef: com.google.firebase.firestore.DocumentReference?,
-        ownerRef: com.google.firebase.firestore.DocumentReference?
+        ownerRef: com.google.firebase.firestore.DocumentReference?,
+        purchaseType: String? = null,
+        brokerFee: Double = 0.0,
+        brokerFeePaymentMethods: Map<String, String>? = null
     ): Result<String> {
         return try {
             // Get maxOrderNo document reference
@@ -758,11 +937,102 @@ object PurchaseRepository {
                 
                 transaction.set(newProductRef, productDetails)
                 
+                // 7. Create person transaction records (within the same transaction)
+                val transactionCollection = db.collection("Transactions")
+                val nowTimestamp = com.google.firebase.Timestamp.now()
+                val (cashAmount, bankAmount, creditAmount) = extractPaymentAmounts(paymentMethods)
+                val paymentMethod = determinePaymentMethod(paymentMethods)
+                
+                // Determine purchase type from brokerOrMiddleManRef if not provided
+                val determinedPurchaseType = purchaseType ?: brokerOrMiddleManRef?.let { ref ->
+                    when {
+                        ref.path.contains("/Broker/") -> "Broker"
+                        ref.path.contains("/Customer/") -> "Middle Man"
+                        else -> null
+                    }
+                }
+                
+                // Create BROKER_FEE transaction (if broker involved and broker fee exists)
+                if (determinedPurchaseType == "Broker" && brokerFee > 0 && brokerOrMiddleManRef != null) {
+                    val brokerFeePaymentMethod = brokerFeePaymentMethods?.let { determinePaymentMethod(it) } ?: paymentMethod
+                    val (brokerFeeCash, brokerFeeBank, brokerFeeCredit) = brokerFeePaymentMethods?.let { extractPaymentAmounts(it) } 
+                        ?: Triple(0.0, 0.0, 0.0)
+                    
+                    val brokerFeeTransactionRef = transactionCollection.document()
+                    val brokerFeeTransactionData = hashMapOf<String, Any>(
+                        "transactionId" to brokerFeeTransactionRef.id,
+                        "type" to TransactionType.BROKER_FEE,
+                        "personType" to PersonType.BROKER,
+                        "personRef" to brokerOrMiddleManRef,
+                        "personName" to middleMan,
+                        "relatedRef" to purchaseDocRef,
+                        "amount" to brokerFee,
+                        "paymentMethod" to brokerFeePaymentMethod,
+                        "cashAmount" to brokerFeeCash,
+                        "bankAmount" to brokerFeeBank,
+                        "creditAmount" to brokerFeeCredit,
+                        "date" to nowTimestamp,
+                        "orderNumber" to orderNumber,
+                        "description" to "Broker fee - Order #$orderNumber",
+                        "status" to "COMPLETED",
+                        "createdAt" to nowTimestamp
+                    )
+                    transaction.set(brokerFeeTransactionRef, brokerFeeTransactionData)
+                }
+                
+                // Create PURCHASE transaction for Middle Man (if middle man involved)
+                if (determinedPurchaseType == "Middle Man" && brokerOrMiddleManRef != null) {
+                    val middleManTransactionRef = transactionCollection.document()
+                    val middleManTransactionData = hashMapOf<String, Any>(
+                        "transactionId" to middleManTransactionRef.id,
+                        "type" to TransactionType.PURCHASE,
+                        "personType" to PersonType.MIDDLE_MAN,
+                        "personRef" to brokerOrMiddleManRef,
+                        "personName" to middleMan,
+                        "relatedRef" to purchaseDocRef,
+                        "amount" to grandTotal,
+                        "paymentMethod" to paymentMethod,
+                        "cashAmount" to cashAmount,
+                        "bankAmount" to bankAmount,
+                        "creditAmount" to creditAmount,
+                        "date" to nowTimestamp,
+                        "orderNumber" to orderNumber,
+                        "description" to "Vehicle purchase - Order #$orderNumber",
+                        "status" to "COMPLETED",
+                        "createdAt" to nowTimestamp
+                    )
+                    transaction.set(middleManTransactionRef, middleManTransactionData)
+                }
+                
+                // Create PURCHASE transaction for Owner (if owner specified)
+                ownerRef?.let { ref ->
+                    val ownerTransactionRef = transactionCollection.document()
+                    val ownerTransactionData = hashMapOf<String, Any>(
+                        "transactionId" to ownerTransactionRef.id,
+                        "type" to TransactionType.PURCHASE,
+                        "personType" to PersonType.CUSTOMER,
+                        "personRef" to ref,
+                        "personName" to product.owner,
+                        "relatedRef" to purchaseDocRef,
+                        "amount" to grandTotal,
+                        "paymentMethod" to paymentMethod,
+                        "cashAmount" to cashAmount,
+                        "bankAmount" to bankAmount,
+                        "creditAmount" to creditAmount,
+                        "date" to nowTimestamp,
+                        "orderNumber" to orderNumber,
+                        "description" to "Vehicle purchase - Order #$orderNumber",
+                        "status" to "COMPLETED",
+                        "createdAt" to nowTimestamp
+                    )
+                    transaction.set(ownerTransactionRef, ownerTransactionData)
+                }
+                
                 // Return purchase ID
                 purchaseIdValue
             }.await()
             
-            Log.d(TAG, "✅ Purchase, capital transactions, and vehicle created atomically with purchaseId: $purchaseId")
+            Log.d(TAG, "✅ Purchase, capital transactions, vehicle, and person transactions created atomically with purchaseId: $purchaseId")
             Result.success(purchaseId)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in atomic purchase with vehicle: ${e.message}", e)

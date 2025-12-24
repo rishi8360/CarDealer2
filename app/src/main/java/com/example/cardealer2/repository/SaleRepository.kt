@@ -1,8 +1,13 @@
 package com.example.cardealer2.repository
 
+import android.annotation.SuppressLint
 import android.util.Log
 import com.example.cardealer2.data.EmiDetails
 import com.example.cardealer2.data.VehicleSale
+import com.example.cardealer2.data.PersonTransaction
+import com.example.cardealer2.data.TransactionType
+import com.example.cardealer2.data.PersonType
+import com.example.cardealer2.data.PaymentMethod
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,6 +22,7 @@ import java.util.Calendar
 import java.util.Date
 
 object SaleRepository {
+    @SuppressLint("StaticFieldLeak")
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance().apply {
         val settings = FirebaseFirestoreSettings.Builder()
             .setPersistenceEnabled(true)
@@ -124,7 +130,9 @@ object SaleRepository {
     }
     
     /**
-     * Add a new vehicle sale
+     * Add a new vehicle sale atomically
+     * Creates sale, updates capital, and marks vehicle as sold in a single transaction
+     * This ensures data consistency - either everything succeeds or everything fails
      */
     suspend fun addSale(
         customerRef: DocumentReference?,
@@ -135,71 +143,165 @@ object SaleRepository {
         emiDetails: EmiDetails? = null
     ): Result<String> {
         return try {
-            val saleDocRef = saleCollection.document()
-            val saleId = saleDocRef.id
-            val nowTimestamp = Timestamp.now()
-
-            val saleData = hashMapOf<String, Any>(
-                "saleId" to saleId,
-                "purchaseType" to purchaseType,
-                "purchaseDate" to nowTimestamp,
-                "totalAmount" to totalAmount,
-                "status" to "Active",
-                "createdAt" to nowTimestamp
-            )
+            // Get capital document reference (Bank is used for down payments)
+            val bankDocRef = capitalCollection.document("Bank")
             
-            customerRef?.let { saleData["customerRef"] = it }
-            vehicleRef?.let { saleData["vehicleRef"] = it }
+            // Determine if we need to update capital
+            val needsCapitalUpdate = (purchaseType == "DOWN_PAYMENT" || purchaseType == "FULL_PAYMENT") && downPayment > 0
             
-            if (purchaseType == "DOWN_PAYMENT" || purchaseType == "FULL_PAYMENT") {
-                saleData["downPayment"] = downPayment
-            }
-            
-            emiDetails?.let { emi ->
-                val emiMap = hashMapOf<String, Any>(
-                    "interestRate" to emi.interestRate,
-                    "frequency" to emi.frequency,
-                    "installmentsCount" to emi.installmentsCount,
-                    "installmentAmount" to emi.installmentAmount,
-                    "nextDueDate" to Timestamp(Date(emi.nextDueDate)),
-                    "remainingInstallments" to emi.remainingInstallments,
-                    "paidInstallments" to emi.paidInstallments
+            // Run everything in a single transaction
+            val saleId = db.runTransaction { transaction ->
+                // ========== PHASE 1: READ ALL DOCUMENTS FIRST ==========
+                // Firestore requires all reads to complete before any writes
+                
+                // 1. Read capital document (if down payment exists)
+                val capitalSnapshot = if (needsCapitalUpdate) {
+                    transaction.get(bankDocRef)
+                } else {
+                    null
+                }
+                
+                // 2. Read product document (if vehicle reference exists)
+                val productSnapshot = vehicleRef?.let { ref ->
+                    transaction.get(ref)
+                }
+                
+                // 3. Read customer document (if customer reference exists) - for transaction record
+                val customerSnapshot = customerRef?.let { ref ->
+                    transaction.get(ref)
+                }
+                
+                // ========== PHASE 2: PERFORM ALL WRITES ==========
+                // Now that all reads are complete, we can perform writes
+                
+                // 1. Create sale document (new document, no read needed)
+                val saleDocRef = saleCollection.document()
+                val saleIdValue = saleDocRef.id
+                val nowTimestamp = Timestamp.now()
+                
+                val saleData = hashMapOf<String, Any>(
+                    "saleId" to saleIdValue,
+                    "purchaseType" to purchaseType,
+                    "purchaseDate" to nowTimestamp,
+                    "totalAmount" to totalAmount,
+                    "status" to "Active",
+                    "createdAt" to nowTimestamp
                 )
-                emi.lastPaidDate?.let { emiMap["lastPaidDate"] = Timestamp(Date(it)) }
-                saleData["emiDetails"] = emiMap
-            }
-            
-            // If down payment, add to capital (Bank or Cash)
-            if ((purchaseType == "DOWN_PAYMENT" || purchaseType == "FULL_PAYMENT") && downPayment > 0) {
-                // Add to Bank capital (you can modify this to allow selection)
-                addToCapital("Bank", downPayment, saleDocRef)
-            }
-            
-            saleDocRef.set(saleData).await()
-            
-            // Update the sold status of the vehicle
-            vehicleRef?.let { ref ->
-                VehicleRepository.getProductByReference(ref).fold(
-                    onSuccess = { product ->
-                        VehicleRepository.updateVehicle(
-                            originalChassisNumber = product.chassisNumber,
-                            updatedProduct = product.copy(sold = true)
-                        )
-                    },
-                    onFailure = { e ->
-                        Log.e(TAG, "Error updating product sold status: ${e.message}", e)
+                
+                customerRef?.let { saleData["customerRef"] = it }
+                vehicleRef?.let { saleData["vehicleRef"] = it }
+                
+                if (purchaseType == "DOWN_PAYMENT" || purchaseType == "FULL_PAYMENT") {
+                    saleData["downPayment"] = downPayment
+                }
+                
+                emiDetails?.let { emi ->
+                    val emiMap = hashMapOf<String, Any>(
+                        "interestRate" to emi.interestRate,
+                        "frequency" to emi.frequency,
+                        "installmentsCount" to emi.installmentsCount,
+                        "installmentAmount" to emi.installmentAmount,
+                        "nextDueDate" to Timestamp(Date(emi.nextDueDate)),
+                        "remainingInstallments" to emi.remainingInstallments,
+                        "paidInstallments" to emi.paidInstallments
+                    )
+                    emi.lastPaidDate?.let { emiMap["lastPaidDate"] = Timestamp(Date(it)) }
+                    saleData["emiDetails"] = emiMap
+                }
+                
+                transaction.set(saleDocRef, saleData)
+                
+                // 2. Update capital document (if down payment exists, using snapshot read in phase 1)
+                if (needsCapitalUpdate && capitalSnapshot != null) {
+                    val existingTransactions = capitalSnapshot.get("transactions") as? List<Map<String, Any>> ?: emptyList()
+                    val currentBalance = (capitalSnapshot.get("balance") as? Long)?.toDouble() 
+                        ?: (capitalSnapshot.get("balance") as? Double) ?: 0.0
+                    
+                    // Add amount to balance (sale increases capital)
+                    val newBalance = currentBalance + downPayment
+                    
+                    val transactionData = hashMapOf<String, Any>(
+                        "transactionDate" to nowTimestamp,
+                        "createdAt" to nowTimestamp,
+                        "amount" to downPayment,
+                        "reference" to saleDocRef
+                    )
+                    
+                    val updatedTransactions = existingTransactions.toMutableList()
+                    updatedTransactions.add(transactionData)
+                    
+                    transaction.set(
+                        bankDocRef,
+                        mapOf(
+                            "transactions" to updatedTransactions,
+                            "balance" to newBalance
+                        ),
+                        SetOptions.merge()
+                    )
+                }
+                
+                // 3. Update product document sold status (using snapshot read in phase 1)
+                productSnapshot?.let { snapshot ->
+                    if (snapshot.exists()) {
+                        transaction.update(snapshot.reference, "sold", true)
                     }
-                )
-            }
+                }
+                
+                // 4. Create person transaction record (within the same transaction)
+                customerRef?.let { ref ->
+                    val transactionCollection = db.collection("Transactions")
+                    val saleTransactionRef = transactionCollection.document()
+                    
+                    // Determine transaction amount based on purchase type
+                    val transactionAmount = when (purchaseType) {
+                        "FULL_PAYMENT" -> totalAmount
+                        "DOWN_PAYMENT" -> downPayment
+                        else -> 0.0 // EMI - will be tracked separately
+                    }
+                    
+                    // Only create transaction if there's an amount (not EMI-only)
+                    if (transactionAmount > 0) {
+                        // Get customer name from snapshot read in phase 1
+                        val customerName = customerSnapshot?.get("name") as? String ?: ""
+                        
+                        val saleTransactionData = hashMapOf<String, Any>(
+                            "transactionId" to saleTransactionRef.id,
+                            "type" to TransactionType.SALE,
+                            "personType" to PersonType.CUSTOMER,
+                            "personRef" to ref,
+                            "personName" to customerName,
+                            "relatedRef" to saleDocRef,
+                            "amount" to transactionAmount,
+                            "paymentMethod" to PaymentMethod.BANK, // Down payment goes to Bank
+                            "cashAmount" to 0.0,
+                            "bankAmount" to transactionAmount,
+                            "creditAmount" to 0.0,
+                            "date" to nowTimestamp,
+                            "orderNumber" to 0,
+                            "description" to when (purchaseType) {
+                                "FULL_PAYMENT" -> "Vehicle sale - Full payment"
+                                "DOWN_PAYMENT" -> "Vehicle sale - Down payment"
+                                else -> "Vehicle sale - EMI initiated"
+                            },
+                            "status" to "COMPLETED",
+                            "createdAt" to nowTimestamp
+                        )
+                        transaction.set(saleTransactionRef, saleTransactionData)
+                    }
+                }
+                
+                // Return sale ID
+                saleIdValue
+            }.await()
             
-            Log.d(TAG, "✅ Sale created successfully with ID: $saleId")
+            Log.d(TAG, "✅ Sale created atomically with ID: $saleId")
             Result.success(saleId)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error adding sale: ${e.message}", e)
             Result.failure(e)
         }
     }
-    
+
     /**
      * Add amount to capital (Bank or Cash)
      */
@@ -378,6 +480,49 @@ object SaleRepository {
             }
             if (bankAmount > 0.0) {
                 addToCapital("Bank", bankAmount, saleDocRef)
+            }
+            
+            // Create EMI payment transaction record
+            sale.customerRef?.let { customerRef ->
+                try {
+                    // Get customer name
+                    val customerDoc = customerRef.get().await()
+                    val customerName = customerDoc.get("name") as? String ?: ""
+                    
+                    val paymentMethod = when {
+                        cashAmount > 0 && bankAmount > 0 -> PaymentMethod.MIXED
+                        cashAmount > 0 -> PaymentMethod.CASH
+                        bankAmount > 0 -> PaymentMethod.BANK
+                        else -> PaymentMethod.CASH
+                    }
+                    
+                    val transactionCollection = db.collection("Transactions")
+                    val emiTransactionRef = transactionCollection.document()
+                    val emiTransactionData = hashMapOf<String, Any>(
+                        "transactionId" to emiTransactionRef.id,
+                        "type" to TransactionType.EMI_PAYMENT,
+                        "personType" to PersonType.CUSTOMER,
+                        "personRef" to customerRef,
+                        "personName" to customerName,
+                        "relatedRef" to saleDocRef,
+                        "amount" to (cashAmount + bankAmount),
+                        "paymentMethod" to paymentMethod,
+                        "cashAmount" to cashAmount,
+                        "bankAmount" to bankAmount,
+                        "creditAmount" to 0.0,
+                        "date" to Timestamp(Date(paymentDate)),
+                        "orderNumber" to 0,
+                        "description" to "EMI Payment - Installment ${newPaidInstallments}/${emiDetails.installmentsCount}",
+                        "status" to "COMPLETED",
+                        "createdAt" to Timestamp.now()
+                    )
+                    emiTransactionRef.set(emiTransactionData).await()
+                    
+                    Log.d(TAG, "✅ EMI payment transaction created for sale: $saleId")
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error creating EMI payment transaction: ${e.message}", e)
+                    // Don't fail the entire operation if transaction creation fails
+                }
             }
             
             Log.d(TAG, "✅ EMI payment recorded for sale: $saleId")

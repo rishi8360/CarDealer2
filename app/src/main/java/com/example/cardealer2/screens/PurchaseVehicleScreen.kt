@@ -354,10 +354,10 @@ fun PurchaseVehicleScreen(
                         colour = colour,
                         onColourSelected = { colour = it },
                         onAddNewColour = { newColour ->
-                            runCatching {
-                                vehicleFormViewModel.addNewColour(newColour)
+                            runCatching {  vehicleFormViewModel.addNewColour(newColour)
                                 colour = newColour
                             }.isSuccess
+
                         },
                         chassisNumber = chassisNumber,
                         onChassisNumberChange = { vehicleFormViewModel.updateChassisNumber(it) },

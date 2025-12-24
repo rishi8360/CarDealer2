@@ -3,7 +3,10 @@ package com.example.cardealer2.ViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Customer
+import com.example.cardealer2.data.PersonTransaction
 import com.example.cardealer2.repository.CustomerRepository
+import com.example.cardealer2.repository.TransactionRepository
+import com.google.firebase.firestore.DocumentReference
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -43,5 +46,12 @@ class ViewCustomersViewModel : ViewModel() {
     @Deprecated("Customers are automatically loaded via Firebase listener in repository")
     fun loadCustomers() {
         // No-op: Repository listener handles this automatically
+    }
+    
+    /**
+     * Load transactions for a customer
+     */
+    suspend fun loadCustomerTransactions(customerRef: DocumentReference): Result<List<PersonTransaction>> {
+        return TransactionRepository.getTransactionsByPerson(customerRef)
     }
 }

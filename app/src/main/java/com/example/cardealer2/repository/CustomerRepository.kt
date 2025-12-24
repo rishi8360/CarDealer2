@@ -1,5 +1,6 @@
 package com.example.cardealer2.repository
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import android.util.Log
 import com.example.cardealer2.data.Customer
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 
 object CustomerRepository {
+    @SuppressLint("StaticFieldLeak")
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance().apply {
         // Configure Firestore settings for better reliability on real devices
         val settings = FirebaseFirestoreSettings.Builder()
