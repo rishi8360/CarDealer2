@@ -1393,13 +1393,7 @@ object VehicleRepository {
         return try {
             val catalogCollection = db.collection("Catalog")
             
-            // First, clear all existing Catalog documents
-            val existingCatalogs = catalogCollection.get().await()
-            for (document in existingCatalogs.documents) {
-                document.reference.delete().await()
-            }
-            println("✅ Cleared ${existingCatalogs.documents.size} existing catalog document(s)")
-            
+
             // Create new catalog document
             val catalogDocRef = catalogCollection.document()
             val catalogId = catalogDocRef.id
