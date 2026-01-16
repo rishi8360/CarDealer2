@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 
 import androidx.compose.ui.unit.dp
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 
 @Composable
@@ -26,12 +29,16 @@ fun AmountInputWithStatus(
     onPaymentStatusChange: (String) -> Unit,
     error: String? = null
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Column(modifier = Modifier.fillMaxWidth()) {
 
         OutlinedTextField(
             value = amount,
             onValueChange = onAmountChange,
-            label = { Text("Amount *") },
+            label = { TranslatedText("Amount *") },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             prefix = { Text("₹ ") },
@@ -60,7 +67,7 @@ fun AmountInputWithStatus(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Receive",
+                            text = TranslationManager.translate("Receive", isPunjabiEnabled),
                             color = if (paymentStatus == "To Receive") Color.White
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
@@ -85,7 +92,7 @@ fun AmountInputWithStatus(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Give",
+                            text = TranslationManager.translate("Give", isPunjabiEnabled),
                             color = if (paymentStatus == "To Give") Color.White
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
@@ -127,9 +134,9 @@ fun AmountInputWithStatus(
         ) {
             Text(
                 text = when (paymentStatus) {
-                    "To Receive" -> "💰 Amount customer needs to pay you"
-                    "To Give" -> "💵 Amount you need to pay customer"
-                    else -> "Select payment type"
+                    "To Receive" -> TranslationManager.translate("💰 Amount customer needs to pay you", isPunjabiEnabled)
+                    "To Give" -> TranslationManager.translate("💵 Amount you need to pay customer", isPunjabiEnabled)
+                    else -> TranslationManager.translate("Select payment type", isPunjabiEnabled)
                 },
                 modifier = Modifier.padding(12.dp),
                 style = MaterialTheme.typography.bodyMedium,

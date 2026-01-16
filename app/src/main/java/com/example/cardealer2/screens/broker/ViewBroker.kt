@@ -29,6 +29,9 @@ import androidx.navigation.NavController
 import com.example.cardealer2.data.Broker
 import com.example.cardealer2.ViewModel.ViewBrokersViewModel
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +42,10 @@ fun ViewBrokerScreen(
     val brokers by viewModel.brokers.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     LaunchedEffect(Unit) {
         viewModel.loadBrokers()
@@ -47,7 +54,7 @@ fun ViewBrokerScreen(
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Broker List",
+                title = TranslationManager.translate("Broker List", isPunjabiEnabled),
                 navController = navController
             )
         }
@@ -75,12 +82,15 @@ fun ViewBrokerScreen(
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                Icon(
+                                    Icons.Default.Close, 
+                                    contentDescription = TranslationManager.translate("Clear search", isPunjabiEnabled)
+                                )
                             }
                         }
                     },
                     singleLine = true,
-                    label = { Text("Search by name or phone") }
+                    label = { TranslatedText("Search by name or phone") }
                 )
 
                 val filteredBrokers = remember(brokers, searchQuery) {
@@ -105,8 +115,8 @@ fun ViewBrokerScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = error ?: "Error loading brokers",
+                            TranslatedText(
+                                englishText = error ?: "Error loading brokers",
                                 color = MaterialTheme.colorScheme.error,
                                 textAlign = TextAlign.Center
                             )
@@ -118,8 +128,8 @@ fun ViewBrokerScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No brokers available",
+                            TranslatedText(
+                                englishText = "No brokers available",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -133,8 +143,8 @@ fun ViewBrokerScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "No results found",
+                                TranslatedText(
+                                    englishText = "No results found",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -177,9 +187,13 @@ fun BrokerCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Broker Icon
+            val context = LocalContext.current
+            val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                .collectAsState(initial = false)
+            
             Icon(
                 Icons.Default.AccountCircle,
-                contentDescription = "Profile",
+                contentDescription = TranslationManager.translate("Profile", isPunjabiEnabled),
                 modifier = Modifier
                     .size(70.dp)
                     .clip(CircleShape),

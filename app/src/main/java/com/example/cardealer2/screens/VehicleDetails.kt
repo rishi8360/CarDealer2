@@ -52,6 +52,9 @@ import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Broker
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.EditActionButton
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import com.example.cardealer2.utils.TranslationDictionary
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,12 +86,29 @@ fun VehicleDetailScreen(
     
     // Note: No need to manually reload when vehicle_updated flag is set
     // The ViewModel automatically observes repository StateFlow and will update when product changes in Firestore
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    val titleText = productFeature?.productId ?: TranslationManager.translate("Vehicle Details", isPunjabiEnabled)
+    val subtitleText = if (productFeature != null) {
+        TranslationManager.translate("Vehicle Details", isPunjabiEnabled)
+    } else null
+
+    var backButtonClicked by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = productFeature?.productId ?: "Vehicle Details",
-                subtitle = if (productFeature != null) "Vehicle Details" else null,
+                title = titleText,
+                subtitle = subtitleText,
                 navController = navController,
+                onBackClick = {
+                    if (!backButtonClicked) {
+                        backButtonClicked = true
+                        navController.popBackStack()
+                    }
+                },
                 actions = {
                     productFeature?.chassisNumber?.let { chassisNumber ->
                         EditActionButton(
@@ -100,17 +120,18 @@ fun VehicleDetailScreen(
                 }
             )
         },
+
         floatingActionButton = {
-            productFeature?.chassisNumber?.let { chassisNumber ->
+            if (productFeature?.sold == false && productFeature?.chassisNumber != null) {
                 FloatingActionButton(
                     onClick = {
-                        navController.navigate("sell_vehicle/$chassisNumber")
+                        navController.navigate("sell_vehicle/${productFeature!!.chassisNumber}")
                     },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.AttachMoney,
-                        contentDescription = "Sell Vehicle"
+                        contentDescription = TranslationManager.translate("Sell Vehicle", isPunjabiEnabled)
                     )
                 }
             }
@@ -143,8 +164,8 @@ fun VehicleDetailScreen(
                                     strokeWidth = 4.dp
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Loading vehicle details...",
+                                TranslatedText(
+                                    englishText = "Loading vehicle details...",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                                 )
@@ -174,8 +195,8 @@ fun VehicleDetailScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Something went wrong",
+                                TranslatedText(
+                                    englishText = "Something went wrong",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.error
@@ -196,7 +217,8 @@ fun VehicleDetailScreen(
                         VehicleDetailContent(
                             product = productFeature!!,
                             modifier = Modifier.weight(1f),
-                            viewModel = viewModel
+                            viewModel = viewModel,
+                            isPunjabiEnabled = isPunjabiEnabled
                         )
                     }
 
@@ -212,7 +234,8 @@ fun VehicleDetailScreen(
     fun VehicleDetailContent(
         product: Product,
         modifier: Modifier = Modifier,
-        viewModel: VehicleDetailViewModel
+        viewModel: VehicleDetailViewModel,
+        isPunjabiEnabled : Boolean
     ) {
         val context = LocalContext.current
         var showOwnerDialog by remember { mutableStateOf(false) }
@@ -276,15 +299,23 @@ fun VehicleDetailScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val contextForSold = LocalContext.current
+                        val isPunjabiEnabledForSold by TranslationManager.isPunjabiEnabled(contextForSold)
+                            .collectAsState(initial = false)
+                        
                         Icon(
                             imageVector = Icons.Outlined.AttachMoney,
-                            contentDescription = "Sold",
+                            contentDescription = TranslationManager.translate("Sold", isPunjabiEnabledForSold),
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
+                        val context = LocalContext.current
+                        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                            .collectAsState(initial = false)
+                        
                         Text(
-                            text = "SOLD",
+                            text = TranslationManager.translate("SOLD", isPunjabiEnabled),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -307,8 +338,12 @@ fun VehicleDetailScreen(
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "Vehicle Images",
+                        val context = LocalContext.current
+                        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                            .collectAsState(initial = false)
+                        
+                        TranslatedText(
+                            englishText = "Vehicle Images",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                             modifier = Modifier.padding(bottom = 12.dp)
@@ -323,8 +358,8 @@ fun VehicleDetailScreen(
                                 .clip(RoundedCornerShape(12.dp))
                         )
 
-                        Text(
-                            text = "Swipe • Double tap to zoom • Drag to move",
+                        TranslatedText(
+                            englishText = "Swipe • Double tap to zoom • Drag to move",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.padding(top = 8.dp)
@@ -341,15 +376,19 @@ fun VehicleDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val context = LocalContext.current
+                val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                    .collectAsState(initial = false)
+                
                 QuickInfoCard(
-                    title = "Price",
+                    title = if (isPunjabiEnabled) TranslationManager.translate("Price", isPunjabiEnabled) else "Purchase Price",
                     value = "₹${product.price}",
                     icon = Icons.Outlined.AttachMoney,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
                 QuickInfoCard(
-                    title = "Year",
+                    title = TranslationManager.translate("Year", isPunjabiEnabled),
                     value = product.year.toString(),
                     icon = Icons.Outlined.CalendarToday,
                     color = MaterialTheme.colorScheme.secondary,
@@ -363,20 +402,60 @@ fun VehicleDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (product.sellingPrice > 0) {
+                    QuickInfoCard(
+                        title = TranslationManager.translate("Selling Price", isPunjabiEnabled),
+                        value = "₹${product.sellingPrice}",
+                        icon = Icons.Outlined.AttachMoney,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    QuickInfoCard(
+                        title = TranslationManager.translate("KMs", isPunjabiEnabled),
+                        value = "${product.kms} km",
+                        icon = Icons.Outlined.Speed,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                val contextForQuickInfo = LocalContext.current
+                val isPunjabiEnabledForQuickInfo by TranslationManager.isPunjabiEnabled(contextForQuickInfo)
+                    .collectAsState(initial = false)
+                
+                val quickInfoTitle = if (product.sellingPrice > 0) 
+                    TranslationManager.translate("Kilometers", isPunjabiEnabledForQuickInfo) 
+                else 
+                    TranslationManager.translate("Condition", isPunjabiEnabledForQuickInfo)
+                
                 QuickInfoCard(
-                    title = "Kilometers",
-                    value = "${product.kms} km",
-                    icon = Icons.Outlined.Speed,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    title = quickInfoTitle,
+                    value = if (product.sellingPrice > 0) "${product.kms} km" else product.condition,
+                    icon = if (product.sellingPrice > 0) Icons.Outlined.Speed else Icons.Outlined.CheckCircle,
+                    color = if (product.sellingPrice > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.error,
                     modifier = Modifier.weight(1f)
                 )
-                QuickInfoCard(
-                    title = "Condition",
-                    value = product.condition,
-                    icon = Icons.Outlined.CheckCircle,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f)
-                )
+            }
+            
+            if (product.sellingPrice > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val contextForCondition = LocalContext.current
+                    val isPunjabiEnabledForCondition by TranslationManager.isPunjabiEnabled(contextForCondition)
+                        .collectAsState(initial = false)
+                    
+                    QuickInfoCard(
+                        title = TranslationManager.translate("Condition", isPunjabiEnabledForCondition),
+                        value = product.condition,
+                        icon = Icons.Outlined.CheckCircle,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -393,8 +472,12 @@ fun VehicleDetailScreen(
                 Column(
                     modifier = Modifier.padding(20.dp)
                 ) {
-                    Text(
-                        text = "Detailed Information",
+                    val contextForDetails = LocalContext.current
+                    val isPunjabiEnabledForDetails by TranslationManager.isPunjabiEnabled(contextForDetails)
+                        .collectAsState(initial = false)
+                    
+                    TranslatedText(
+                        englishText = "Detailed Information",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -404,35 +487,35 @@ fun VehicleDetailScreen(
                     // Vehicle Details
                     EnhancedDetailRow(
                         icon = Icons.Outlined.DirectionsCar,
-                        label = "Model Name",
+                        label = TranslationManager.translate("Model Name", isPunjabiEnabledForDetails),
                         value = product.productId,
                         color = MaterialTheme.colorScheme.primary
                     )
 
                     EnhancedDetailRow(
                         icon = Icons.Outlined.Palette,
-                        label = "Color",
+                        label = TranslationManager.translate("Color", isPunjabiEnabledForDetails),
                         value = product.colour,
                         color = MaterialTheme.colorScheme.secondary
                     )
 
                     EnhancedDetailRow(
                         icon = Icons.Outlined.Tag,
-                        label = "Brand ID",
+                        label = TranslationManager.translate("Brand ID", isPunjabiEnabledForDetails),
                         value = product.brandId,
                         color = MaterialTheme.colorScheme.tertiary
                     )
 
                     EnhancedDetailRow(
                         icon = Icons.Outlined.Numbers,
-                        label = "Chassis Number",
+                        label = TranslationManager.translate("Chassis Number", isPunjabiEnabledForDetails),
                         value = product.chassisNumber,
                         color = MaterialTheme.colorScheme.error
                     )
 
                     EnhancedDetailRow(
                         icon = Icons.Outlined.Build,
-                        label = "Last Service",
+                        label = TranslationManager.translate("Last Service", isPunjabiEnabledForDetails),
                         value = product.lastService,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -441,7 +524,7 @@ fun VehicleDetailScreen(
                     if (product.owner.isNotEmpty()) {
                         EnhancedDetailRowWithAction(
                             icon = Icons.Outlined.Person,
-                            label = "Owner",
+                            label = TranslationManager.translate("Owner", isPunjabiEnabledForDetails),
                             value = product.owner,
                             color = MaterialTheme.colorScheme.primary,
                             onClick = {
@@ -457,7 +540,7 @@ fun VehicleDetailScreen(
                     if (product.brokerOrMiddleMan.isNotEmpty()) {
                         EnhancedDetailRowWithAction(
                             icon = Icons.Outlined.Business,
-                            label = "Broker/Middle Man",
+                            label = TranslationManager.translate("Broker/Middle Man", isPunjabiEnabledForDetails),
                             value = product.brokerOrMiddleMan,
                             color = MaterialTheme.colorScheme.secondary,
                             onClick = {
@@ -481,8 +564,8 @@ fun VehicleDetailScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Documents Section - NOC, RC, Insurance
-            if (product.noc.isNotEmpty() || product.rc.isNotEmpty() || product.insurance.isNotEmpty()) {
+            // Documents Section - NOC, RC, Insurance, Other Documents
+            if (product.noc.isNotEmpty() || product.rc.isNotEmpty() || product.insurance.isNotEmpty() || product.vehicleOtherDoc.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -494,8 +577,12 @@ fun VehicleDetailScreen(
                     Column(
                         modifier = Modifier.padding(20.dp)
                     ) {
-                        Text(
-                            text = "Documents",
+                        val context = LocalContext.current
+                        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                            .collectAsState(initial = false)
+                        
+                        TranslatedText(
+                            englishText = "Documents",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -504,8 +591,8 @@ fun VehicleDetailScreen(
 
                         // NOC Documents
                         if (product.noc.isNotEmpty()) {
-                            Text(
-                                text = "NOC (No Objection Certificate)",
+                            TranslatedText(
+                                englishText = "NOC (No Objection Certificate)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -513,8 +600,9 @@ fun VehicleDetailScreen(
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 product.noc.forEachIndexed { index, url ->
+                                    val docTitle = "${TranslationManager.translate("NOC Document", isPunjabiEnabled)} ${index + 1}"
                                     PdfDocumentCard(
-                                        title = "NOC Document ${index + 1}",
+                                        title = docTitle,
                                         pdfUrl = url,
                                         onClick = {
                                             openPdf(context, url)
@@ -526,8 +614,8 @@ fun VehicleDetailScreen(
 
                         // RC Documents
                         if (product.rc.isNotEmpty()) {
-                            Text(
-                                text = "RC (Registration Certificate)",
+                            TranslatedText(
+                                englishText = "RC (Registration Certificate)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -535,8 +623,9 @@ fun VehicleDetailScreen(
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 product.rc.forEachIndexed { index, url ->
+                                    val docTitle = "${TranslationManager.translate("RC Document", isPunjabiEnabled)} ${index + 1}"
                                     PdfDocumentCard(
-                                        title = "RC Document ${index + 1}",
+                                        title = docTitle,
                                         pdfUrl = url,
                                         onClick = {
                                             openPdf(context, url)
@@ -548,8 +637,8 @@ fun VehicleDetailScreen(
 
                         // Insurance Documents
                         if (product.insurance.isNotEmpty()) {
-                            Text(
-                                text = "Insurance",
+                            TranslatedText(
+                                englishText = "Insurance",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -557,8 +646,32 @@ fun VehicleDetailScreen(
                             )
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 product.insurance.forEachIndexed { index, url ->
+                                    val docTitle = "${TranslationManager.translate("Insurance Document", isPunjabiEnabled)} ${index + 1}"
                                     PdfDocumentCard(
-                                        title = "Insurance Document ${index + 1}",
+                                        title = docTitle,
+                                        pdfUrl = url,
+                                        onClick = {
+                                            openPdf(context, url)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Other Vehicle Documents
+                        if (product.vehicleOtherDoc.isNotEmpty()) {
+                            TranslatedText(
+                                englishText = "Other Vehicle Documents",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(bottom = 8.dp, top = 16.dp)
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                product.vehicleOtherDoc.forEachIndexed { index, url ->
+                                    val docTitle = "${TranslationManager.translate("Other Document", isPunjabiEnabled)} ${index + 1}"
+                                    PdfDocumentCard(
+                                        title = docTitle,
                                         pdfUrl = url,
                                         onClick = {
                                             openPdf(context, url)
@@ -636,9 +749,13 @@ fun VehicleDetailScreen(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val contextForPdf = LocalContext.current
+                val isPunjabiEnabledForPdf by TranslationManager.isPunjabiEnabled(contextForPdf)
+                    .collectAsState(initial = false)
+                
                 Icon(
                     imageVector = Icons.Default.PictureAsPdf,
-                    contentDescription = "PDF Document",
+                    contentDescription = TranslationManager.translate("PDF Document", isPunjabiEnabledForPdf),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.size(40.dp)
                 )
@@ -650,15 +767,15 @@ fun VehicleDetailScreen(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
-                    Text(
-                        text = "Tap to open PDF",
+                    TranslatedText(
+                        englishText = "Tap to open PDF",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                     )
                 }
                 Icon(
                     imageVector = Icons.Outlined.OpenInNew,
-                    contentDescription = "Open PDF",
+                    contentDescription = TranslationManager.translate("Open PDF", isPunjabiEnabledForPdf),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                     modifier = Modifier.size(24.dp)
                 )

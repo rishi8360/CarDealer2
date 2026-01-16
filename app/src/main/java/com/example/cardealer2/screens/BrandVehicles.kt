@@ -38,6 +38,9 @@ import coil.compose.AsyncImage
 import com.example.cardealer2.ViewModel.BrandVehicleViewModel
 import com.example.cardealer2.data.Product
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +61,7 @@ fun BrandVehicles(
 
     var searchText by remember { mutableStateOf("") }
     var soldStatusFilter by remember { mutableStateOf("not_sold_products") } // Default to not sold
+    var backButtonClicked by remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -105,12 +109,27 @@ fun BrandVehicles(
         filteredFeatures = tempFiltered
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = if (isLoading) "Loading..." else "$brandName $productId",
-                subtitle = if (productList.isNotEmpty()) "${filteredFeatures.size} vehicles available" else null,
+                title = if (isLoading) 
+                    TranslationManager.translate("Loading...", isPunjabiEnabled) 
+                else 
+                    "$brandName $productId",
+                subtitle = if (productList.isNotEmpty()) {
+                    "${filteredFeatures.size} ${TranslationManager.translate("vehicles available", isPunjabiEnabled)}"
+                } else null,
                 navController = navController,
+                onBackClick = {
+                    if (!backButtonClicked) {
+                        backButtonClicked = true
+                        navController.popBackStack()
+                    }
+                },
                 actions = {
                     Surface(
                         modifier = Modifier.size(36.dp),
@@ -151,8 +170,8 @@ fun BrandVehicles(
                                 strokeWidth = 4.dp
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Loading vehicles...",
+                            TranslatedText(
+                                englishText = "Loading vehicles...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                             )
@@ -173,8 +192,8 @@ fun BrandVehicles(
                                 style = MaterialTheme.typography.displayMedium
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Something went wrong",
+                            TranslatedText(
+                                englishText = "Something went wrong",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.error
@@ -208,16 +227,16 @@ fun BrandVehicles(
                         // Show no-match state when there are products but none match search
                         productList.filterNotNull().isNotEmpty() && filteredFeatures.isEmpty() && searchText.isNotBlank() -> {
                             EnhancedEmptyState(
-                                title = "No Matching Vehicles",
-                                message = "Try adjusting your search criteria.",
+                                title = TranslationManager.translate("No Matching Vehicles", isPunjabiEnabled),
+                                message = TranslationManager.translate("Try adjusting your search criteria.", isPunjabiEnabled),
                                 icon = Icons.Default.Search
                             )
                         }
                         // Show no vehicles state when there are no products at all
                         productList.filterNotNull().isEmpty() -> {
                             EnhancedEmptyState(
-                                title = "No Vehicles Available",
-                                message = "There are no vehicles available for this brand and model.",
+                                title = TranslationManager.translate("No Vehicles Available", isPunjabiEnabled),
+                                message = TranslationManager.translate("There are no vehicles available for this brand and model.", isPunjabiEnabled),
                                 icon = Icons.Default.DirectionsCar
                             )
                         }
@@ -318,6 +337,9 @@ fun EnhancedControlsSection(
     onFilterClick: () -> Unit,
     onResetClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
     Column {
         // Control Buttons Row
         Row(
@@ -339,11 +361,11 @@ fun EnhancedControlsSection(
             ) {
                 Icon(
                     Icons.Default.FilterList,
-                    contentDescription = "Filter",
+                    contentDescription = TranslationManager.translate("Filter", isPunjabiEnabled),
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Filter")
+                TranslatedText("Filter")
             }
 
             // Reset Button
@@ -358,7 +380,7 @@ fun EnhancedControlsSection(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
-                Text("Reset")
+                TranslatedText("Reset")
             }
         }
 
@@ -367,7 +389,7 @@ fun EnhancedControlsSection(
             value = searchText,
             onValueChange = onSearchTextChange,
             placeholder = {
-                Text(
+                TranslatedText(
                     "Search vehicles...",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -379,7 +401,7 @@ fun EnhancedControlsSection(
             leadingIcon = {
                 Icon(
                     Icons.Default.Search,
-                    contentDescription = "Search",
+                    contentDescription = TranslationManager.translate("Search", isPunjabiEnabled),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             },
@@ -388,7 +410,7 @@ fun EnhancedControlsSection(
                     IconButton(onClick = { onSearchTextChange("") }) {
                         Icon(
                             Icons.Default.Clear,
-                            contentDescription = "Clear",
+                            contentDescription = TranslationManager.translate("Clear search", isPunjabiEnabled),
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
@@ -610,13 +632,17 @@ fun SimpleFilterBottomSheet(
     onSortOptionSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
     ) {
-        Text(
-            text = "Filter Options",
+        TranslatedText(
+            englishText = "Filter Options",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -625,38 +651,38 @@ fun SimpleFilterBottomSheet(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Filter by Sold Status
-        FilterOption("All Products") {
+        FilterOption(TranslationManager.translate("All Products", isPunjabiEnabled)) {
             onSortOptionSelected("all_products")
         }
-        FilterOption("Sold Products") {
+        FilterOption(TranslationManager.translate("Sold Products", isPunjabiEnabled)) {
             onSortOptionSelected("sold_products")
         }
-        FilterOption("Not Sold Products") {
+        FilterOption(TranslationManager.translate("Not Sold Products", isPunjabiEnabled)) {
             onSortOptionSelected("not_sold_products")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         // Sort by Price
-        FilterOption("Sort by Price (Low to High)") {
+        FilterOption(TranslationManager.translate("Sort by Price (Low to High)", isPunjabiEnabled)) {
             onSortOptionSelected("price_low_high")
         }
 
-        FilterOption("Sort by Price (High to Low)") {
+        FilterOption(TranslationManager.translate("Sort by Price (High to Low)", isPunjabiEnabled)) {
             onSortOptionSelected("price_high_low")
         }
 
         // Sort by Year
-        FilterOption("Sort by Year (Newest First)") {
+        FilterOption(TranslationManager.translate("Sort by Year (New to Old)", isPunjabiEnabled)) {
             onSortOptionSelected("year_new_old")
         }
 
-        FilterOption("Sort by Year (Oldest First)") {
+        FilterOption(TranslationManager.translate("Sort by Year (Old to New)", isPunjabiEnabled)) {
             onSortOptionSelected("year_old_new")
         }
 
         // Filter by Condition
-        FilterOption("Sort by Condition") {
+        FilterOption(TranslationManager.translate("Sort by Condition", isPunjabiEnabled)) {
             onSortOptionSelected("condition")
         }
 

@@ -22,6 +22,9 @@ import com.example.cardealer2.data.Brand
 import com.example.cardealer2.utility.*
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.DeleteActionButton
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 sealed interface VehicleFormMode {
     data class Add(val defaultBrandId: String?) : VehicleFormMode
@@ -56,6 +59,7 @@ fun VehicleFormScreen(
     var lastService by rememberSaveable { mutableStateOf("") }
     var previousOwners by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
+    var sellingPrice by rememberSaveable { mutableStateOf("") }
     var year by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var nocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
@@ -78,6 +82,7 @@ fun VehicleFormScreen(
     var initialLastService by rememberSaveable { mutableStateOf("") }
     var initialPreviousOwners by rememberSaveable { mutableStateOf("") }
     var initialPrice by rememberSaveable { mutableStateOf("") }
+    var initialSellingPrice by rememberSaveable { mutableStateOf("") }
     var initialYear by rememberSaveable { mutableStateOf("") }
     var initialType by rememberSaveable { mutableStateOf("") }
     var initialNocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
@@ -103,6 +108,7 @@ fun VehicleFormScreen(
                 initialLastService = ""
                 initialPreviousOwners = ""
                 initialPrice = ""
+                initialSellingPrice = ""
                 initialYear = ""
                 initialType = ""
                 initialNocPdfs = emptyList()
@@ -131,6 +137,7 @@ fun VehicleFormScreen(
             lastService = p.lastService
             previousOwners = p.previousOwners.toString()
             price = p.price.toString()
+            sellingPrice = p.sellingPrice.toString()
             year = p.year.toString()
             type = p.type
             nocPdfs = p.noc
@@ -149,6 +156,7 @@ fun VehicleFormScreen(
             initialLastService = p.lastService
             initialPreviousOwners = p.previousOwners.toString()
             initialPrice = p.price.toString()
+            initialSellingPrice = p.sellingPrice.toString()
             initialYear = p.year.toString()
             initialType = p.type
             initialNocPdfs = p.noc
@@ -170,6 +178,7 @@ fun VehicleFormScreen(
         lastService,
         previousOwners,
         price,
+        sellingPrice,
         year,
         type,
         nocPdfs,
@@ -204,6 +213,7 @@ fun VehicleFormScreen(
                 lastService != initialLastService ||
                 previousOwners != initialPreviousOwners ||
                 price != initialPrice ||
+                sellingPrice != initialSellingPrice ||
                 year != initialYear ||
                 type != initialType ||
                 nocPdfs != initialNocPdfs ||
@@ -214,10 +224,17 @@ fun VehicleFormScreen(
         )
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = if (mode is VehicleFormMode.Add) "Add Vehicle" else "Edit Vehicle Details",
+                title = if (mode is VehicleFormMode.Add) 
+                    TranslationManager.translate("Add Vehicle", isPunjabiEnabled) 
+                else 
+                    TranslationManager.translate("Edit Vehicle Details", isPunjabiEnabled),
                 navController = navController,
                 onBackClick = {
                     if (isDirty && !uiState.isLoading) showUnsavedDialog = true else navController.smartPopBack()
@@ -246,7 +263,7 @@ fun VehicleFormScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 FilterableDropdownField(
-                    label = "Brand Name",
+                    label = TranslationManager.translate("Brand Name", isPunjabiEnabled),
                     items = brandNames,
                     selectedItem = brandName,
                     onItemSelected = { brand ->
@@ -265,17 +282,31 @@ fun VehicleFormScreen(
                     onExpandedChange = { expanded -> isDropdownExpanded = expanded }
                 )
 
+                val vehicleTypeItems = remember(isPunjabiEnabled) {
+                    listOf(
+                        TranslationManager.translate("Bike", isPunjabiEnabled),
+                        TranslationManager.translate("Car", isPunjabiEnabled)
+                    )
+                }
+
                 FilterableDropdownField(
-                    label = "Type of Vehicle",
-                    items = listOf("Bike", "Car"),
+                    label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
+                    items = vehicleTypeItems,
                     selectedItem = type,
-                    onItemSelected = { type = it },
+                    onItemSelected = { 
+                        // Convert translated text back to English for internal use
+                        type = when (it) {
+                            TranslationManager.translate("Bike", isPunjabiEnabled) -> "Bike"
+                            TranslationManager.translate("Car", isPunjabiEnabled) -> "Car"
+                            else -> it
+                        }
+                    },
                     itemToString = { it },
                     onExpandedChange = { expanded -> isDropdownExpanded = expanded }
                 )
 
                 FilterableDropdownField(
-                    label = "Name of Model",
+                    label = TranslationManager.translate("Name of Model", isPunjabiEnabled),
                     items = models,
                     selectedItem = modelName,
                     onItemSelected = { modelName = it },
@@ -293,7 +324,7 @@ fun VehicleFormScreen(
                 }
 
                 FilterableDropdownField(
-                    label = "Colour",
+                    label = TranslationManager.translate("Colour", isPunjabiEnabled),
                     items = colourList,
                     selectedItem = colour,
                     onItemSelected = { colour = it },
@@ -321,11 +352,29 @@ fun VehicleFormScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val conditionItems = remember(isPunjabiEnabled) {
+                    listOf(
+                        TranslationManager.translate("Excellent", isPunjabiEnabled),
+                        TranslationManager.translate("Good", isPunjabiEnabled),
+                        TranslationManager.translate("Fair", isPunjabiEnabled),
+                        TranslationManager.translate("Poor", isPunjabiEnabled)
+                    )
+                }
+
                 FilterableDropdownField(
-                    label = "Condition",
-                    items = listOf("Excellent", "Good", "Fair", "Poor"),
+                    label = TranslationManager.translate("Condition", isPunjabiEnabled),
+                    items = conditionItems,
                     selectedItem = condition,
-                    onItemSelected = { condition = it },
+                    onItemSelected = { 
+                        // Convert translated text back to English for internal use
+                        condition = when (it) {
+                            TranslationManager.translate("Excellent", isPunjabiEnabled) -> "Excellent"
+                            TranslationManager.translate("Good", isPunjabiEnabled) -> "Good"
+                            TranslationManager.translate("Fair", isPunjabiEnabled) -> "Fair"
+                            TranslationManager.translate("Poor", isPunjabiEnabled) -> "Poor"
+                            else -> it
+                        }
+                    },
                     itemToString = { it },
                     onExpandedChange = { expanded -> isDropdownExpanded = expanded }
                 )
@@ -334,7 +383,7 @@ fun VehicleFormScreen(
                 }
 
                 ImagePickerField(
-                    label = "Vehicle Images",
+                    label = TranslationManager.translate("Vehicle Images", isPunjabiEnabled),
                     images = images,
                     onImagesChanged = { images = it },
                     errorMessage = uiState.imageError,
@@ -348,13 +397,13 @@ fun VehicleFormScreen(
                     OutlinedTextField(
                         value = kms,
                         onValueChange = { kms = it },
-                        label = { Text("KMs *") },
+                        label = { TranslatedText("KMs *") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isError = uiState.kmsError != null
                     )
                     YearPickerField(
-                        label = "Year *",
+                        label = TranslationManager.translate("Year *", isPunjabiEnabled),
                         selectedYear = year,
                         onYearSelected = { year = it },
                         errorMessage = uiState.yearError,
@@ -375,7 +424,7 @@ fun VehicleFormScreen(
                     OutlinedTextField(
                         value = price,
                         onValueChange = { price = it },
-                        label = { Text("Price *") },
+                        label = { TranslatedText("Purchase Price *") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isError = uiState.priceError != null
@@ -383,7 +432,7 @@ fun VehicleFormScreen(
                     OutlinedTextField(
                         value = previousOwners,
                         onValueChange = { previousOwners = it },
-                        label = { Text("Previous Owners") },
+                        label = { TranslatedText("Previous Owners") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isError = uiState.previousOwnersError != null
@@ -395,9 +444,17 @@ fun VehicleFormScreen(
                 if (uiState.previousOwnersError != null) {
                     Text(text = uiState.previousOwnersError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = sellingPrice,
+                    onValueChange = { sellingPrice = it },
+                    label = { TranslatedText("Selling Price") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
 
                 DatePickerField(
-                    label = "Last Service",
+                    label = TranslationManager.translate("Last Service", isPunjabiEnabled),
                     selectedDate = lastService,
                     onDateSelected = { lastService = it },
                     errorMessage = uiState.lastServiceError,
@@ -406,8 +463,8 @@ fun VehicleFormScreen(
 
                 HorizontalDivider()
 
-                Text(
-                    text = "Document Details",
+                TranslatedText(
+                    englishText = "Document Details",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -464,7 +521,7 @@ fun VehicleFormScreen(
                     OutlinedButton(
                         onClick = { if (isDirty && !uiState.isLoading) showUnsavedDialog = true else navController.smartPopBack() },
                         modifier = Modifier.weight(1f)
-                    ) { Text("Cancel") }
+                    ) { TranslatedText("Cancel") }
 
                     Button(
                         onClick = {
@@ -481,6 +538,7 @@ fun VehicleFormScreen(
                                         lastService = lastService,
                                         previousOwners = previousOwners,
                                         price = price,
+                                        sellingPrice = sellingPrice,
                                         year = year,
                                         type = type,
                                         nocPdfs = nocPdfs,
@@ -504,6 +562,7 @@ fun VehicleFormScreen(
                                         lastService = lastService,
                                         previousOwners = previousOwners,
                                         price = price,
+                                        sellingPrice = sellingPrice,
                                         year = year,
                                         type = type,
                                         nocPdfs = nocPdfs,
@@ -521,7 +580,11 @@ fun VehicleFormScreen(
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
-                            Text(if (mode is VehicleFormMode.Add) "Add Vehicle" else "Update Vehicle")
+                            val buttonText = if (mode is VehicleFormMode.Add) 
+                                TranslationManager.translate("Add Vehicle", isPunjabiEnabled) 
+                            else 
+                                TranslationManager.translate("Update Vehicle", isPunjabiEnabled)
+                            Text(buttonText)
                         }
                     }
                 }
@@ -533,13 +596,17 @@ fun VehicleFormScreen(
         AlertDialog(
             onDismissRequest = { if (!uiState.isLoading) showDeleteDialog = false },
             icon = {},
-            title = { Text("Delete Vehicle") },
-            text = { Text("Are you sure you want to delete this vehicle? This action cannot be undone.") },
+            title = { TranslatedText("Delete Vehicle") },
+            text = { TranslatedText("Are you sure you want to delete this vehicle? This action cannot be undone.") },
             confirmButton = {
-                Button(onClick = { lastAction = "delete"; viewModel.deleteVehicle(mode.chassisNumber) }, enabled = !uiState.isLoading) { Text("Delete") }
+                Button(onClick = { lastAction = "delete"; viewModel.deleteVehicle(mode.chassisNumber) }, enabled = !uiState.isLoading) { 
+                    TranslatedText("Delete") 
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { if (!uiState.isLoading) showDeleteDialog = false }) { Text("Cancel") }
+                OutlinedButton(onClick = { if (!uiState.isLoading) showDeleteDialog = false }) { 
+                    TranslatedText("Cancel") 
+                }
             }
         )
     }
@@ -549,13 +616,17 @@ fun VehicleFormScreen(
         AlertDialog(
             onDismissRequest = { if (!uiState.isLoading) showUnsavedDialog = false },
             icon = {},
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Do you want to discard them and go back?") },
+            title = { TranslatedText("Discard changes?") },
+            text = { TranslatedText("You have unsaved changes. Do you want to discard them and go back?") },
             confirmButton = {
-                Button(onClick = { showUnsavedDialog = false; navController.smartPopBack() }, enabled = !uiState.isLoading) { Text("Discard") }
+                Button(onClick = { showUnsavedDialog = false; navController.smartPopBack() }, enabled = !uiState.isLoading) { 
+                    TranslatedText("Discard") 
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { if (!uiState.isLoading) showUnsavedDialog = false }) { Text("Keep Editing") }
+                OutlinedButton(onClick = { if (!uiState.isLoading) showUnsavedDialog = false }) { 
+                    TranslatedText("Keep Editing") 
+                }
             }
         )
     }

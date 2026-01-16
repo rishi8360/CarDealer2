@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -37,9 +38,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cardealer2.ViewModel.PaymentsViewModel
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utility.DatePickerButton
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.Calendar
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.rememberScrollState
@@ -60,7 +65,77 @@ fun EmiDueScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
 
-    val tabs = listOf("Upcoming", "Overdue", "All")
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    // Date range state - default to today
+    val calendar = remember { Calendar.getInstance() }
+    val todayStart = remember {
+        calendar.apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    
+    var fromDateString by remember { mutableStateOf("") }
+    var toDateString by remember { mutableStateOf("") }
+    
+    // Initialize dates to today
+    LaunchedEffect(Unit) {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val today = dateFormat.format(Date(todayStart))
+        fromDateString = today
+        toDateString = today
+    }
+    
+    // Convert date strings to timestamps (start of day for fromDate, end of day for toDate)
+    val fromDateTimestamp = remember(fromDateString) {
+        try {
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val date = dateFormat.parse(fromDateString) ?: Date(todayStart)
+            Calendar.getInstance().apply {
+                time = date
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        } catch (e: Exception) {
+            todayStart
+        }
+    }
+    
+    val toDateTimestamp = remember(toDateString) {
+        try {
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val date = dateFormat.parse(toDateString) ?: Date(todayStart)
+            Calendar.getInstance().apply {
+                time = date
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        } catch (e: Exception) {
+            todayStart
+        }
+    }
+    
+    // Load data when date range changes or on initial load
+    LaunchedEffect(fromDateTimestamp, toDateTimestamp) {
+        viewModel.loadEmiScheduleWithDateRange(fromDateTimestamp, toDateTimestamp)
+    }
+    
+    val tabs = remember(isPunjabiEnabled) {
+        listOf(
+            TranslationManager.translate("Upcoming", isPunjabiEnabled),
+            TranslationManager.translate("Overdue", isPunjabiEnabled),
+            TranslationManager.translate("All", isPunjabiEnabled)
+        )
+    }
     var selectedTab by remember { mutableStateOf(0) }
     val listToShow = remember(selectedTab, emiSchedule, overdue, upcoming) {
         when (selectedTab) {
@@ -73,8 +148,8 @@ fun EmiDueScreen(
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "EMI Schedule",
-                subtitle = "Track dues & installments",
+                title = TranslationManager.translate("EMI Schedule", isPunjabiEnabled),
+                subtitle = TranslationManager.translate("Track dues & installments", isPunjabiEnabled),
                 navController = navController
             )
         }
@@ -88,6 +163,81 @@ fun EmiDueScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
+                // Date Range Filter Section
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = TranslationManager.translate("Date Range", isPunjabiEnabled),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            IconButton(
+                                onClick = { 
+                                    viewModel.loadEmiScheduleWithDateRange(fromDateTimestamp, toDateTimestamp)
+                                },
+                                enabled = !isLoading
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Refresh,
+                                    contentDescription = TranslationManager.translate("Refresh", isPunjabiEnabled),
+                                    tint = if (isLoading) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // From Date
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = TranslationManager.translate("From", isPunjabiEnabled),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                DatePickerButton(
+                                    selectedDate = fromDateString,
+                                    onDateSelected = { fromDateString = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    defaultToToday = false
+                                )
+                            }
+                            
+                            // To Date
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = TranslationManager.translate("To", isPunjabiEnabled),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                DatePickerButton(
+                                    selectedDate = toDateString,
+                                    onDateSelected = { toDateString = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    defaultToToday = false
+                                )
+                            }
+                        }
+                    }
+                }
+                
                 // Modern Tab Design
                 Surface(
                     tonalElevation = 2.dp,
@@ -142,7 +292,7 @@ fun EmiDueScreen(
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
                                     CircularProgressIndicator()
-                                    Text(
+                                    TranslatedText(
                                         "Loading EMI schedules...",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -170,8 +320,8 @@ fun EmiDueScreen(
                                             style = MaterialTheme.typography.displaySmall
                                         )
                                         Spacer(modifier = Modifier.height(12.dp))
-                                        Text(
-                                            text = error ?: "Unknown error",
+                                        TranslatedText(
+                                            englishText = error ?: "Unknown error",
                                             style = MaterialTheme.typography.bodyLarge,
                                             color = MaterialTheme.colorScheme.onErrorContainer
                                         )
@@ -203,8 +353,8 @@ fun EmiDueScreen(
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                                         )
                                     }
-                                    Text(
-                                        text = when (selectedTab) {
+                                    TranslatedText(
+                                        englishText = when (selectedTab) {
                                             0 -> "No upcoming EMIs"
                                             1 -> "No overdue EMIs"
                                             else -> "No EMI purchases found"
@@ -213,8 +363,8 @@ fun EmiDueScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text(
-                                        text = when (selectedTab) {
+                                    TranslatedText(
+                                        englishText = when (selectedTab) {
                                             0 -> "All payments are up to date"
                                             1 -> "Great! No overdue payments"
                                             else -> "Start by adding EMI purchases"
@@ -228,8 +378,8 @@ fun EmiDueScreen(
                         else -> {
                             EmiDueList(
                                 schedule = listToShow,
-                                onRecordPayment = { saleId, cashAmount, bankAmount ->
-                                    viewModel.recordEmiPayment(saleId, cashAmount, bankAmount)
+                                onRecordPayment = { sale, emiDetails, cashAmount, bankAmount, note, date ->
+                                    viewModel.recordEmiPayment(sale, emiDetails, cashAmount, bankAmount, note, date)
                                 }
                             )
                         }
@@ -243,8 +393,12 @@ fun EmiDueScreen(
 @Composable
 private fun EmiDueList(
     schedule: List<PaymentsViewModel.SaleWithDetails>,
-    onRecordPayment: (String, Double, Double) -> Unit
+    onRecordPayment: (com.example.cardealer2.data.VehicleSale, com.example.cardealer2.data.EmiDetails, Double, Double, String, String) -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     var selectedSale by remember { mutableStateOf<PaymentsViewModel.SaleWithDetails?>(null) }
     var showCustomerDialog by remember { mutableStateOf(false) }
     var selectedSaleForDialog by remember { mutableStateOf<PaymentsViewModel.SaleWithDetails?>(null) }
@@ -265,11 +419,11 @@ private fun EmiDueList(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(schedule) { detail ->
-            val emi = detail.sale.emiDetails
+            val emi = detail.emiDetails
             val dueDate = emi?.nextDueDate ?: 0L
             val isOverdue = dueDate in 1 until todayStart
             val isDueToday = dueDate == todayStart
-            val dueText = if (dueDate > 0) dateFormatter.format(Date(dueDate)) else "Not set"
+            val dueText = if (dueDate > 0) dateFormatter.format(Date(dueDate)) else TranslationManager.translate("Not set", isPunjabiEnabled)
             val amountText = emi?.installmentAmount ?: 0.0
 
             ElevatedCard(
@@ -313,7 +467,7 @@ private fun EmiDueList(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = detail.customer?.customerName ?: "Unknown Customer",
+                                        text = detail.customer?.customerName ?: TranslationManager.translate("Unknown Customer", isPunjabiEnabled),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = when {
@@ -332,7 +486,7 @@ private fun EmiDueList(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Outlined.Info,
-                                                contentDescription = "View Customer Info",
+                                                contentDescription = TranslationManager.translate("View Customer Info", isPunjabiEnabled),
                                                 tint = when {
                                                     isOverdue -> MaterialTheme.colorScheme.onErrorContainer
                                                     isDueToday -> MaterialTheme.colorScheme.onSecondaryContainer
@@ -515,11 +669,12 @@ private fun EmiDueList(
     }
 
     val saleForPayment = selectedSale
-    if (saleForPayment != null) {
+    if (saleForPayment != null && saleForPayment.emiDetails != null) {
         SplitPaymentDialog(
             sale = saleForPayment.sale,
-            onPaymentRecorded = { cash, bank ->
-                onRecordPayment(saleForPayment.sale.saleId, cash, bank)
+            emiDetails = saleForPayment.emiDetails,
+            onPaymentRecorded = { cash, bank, note, date ->
+                onRecordPayment(saleForPayment.sale, saleForPayment.emiDetails!!, cash, bank, note, date)
                 selectedSale = null
             },
             onDismiss = {
@@ -597,7 +752,7 @@ fun CustomerInfoDialog(
     val customer = saleWithDetails?.customer
     val sale = saleWithDetails?.sale
     val vehicle = saleWithDetails?.vehicle
-    val emi = sale?.emiDetails
+    val emi = saleWithDetails?.emiDetails  // EmiDetails is now in SaleWithDetails, not in VehicleSale
     
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     Dialog(
@@ -736,12 +891,16 @@ fun CustomerInfoDialog(
                                 }
                                 // WhatsApp Button
                                 if (customer.phoneNumber.isNotBlank() && emi != null && emi.remainingInstallments > 0) {
+                                    val contextForSms = LocalContext.current
+                                    val isPunjabiEnabledForSms by TranslationManager.isPunjabiEnabled(contextForSms)
+                                        .collectAsState(initial = false)
+                                    
                                     IconButton(
                                         onClick = {
                                             val dueDateText = if (emi.nextDueDate > 0) {
                                                 dateFormatter.format(Date(emi.nextDueDate))
                                             } else {
-                                                "Not set"
+                                                TranslationManager.translate("Not set", isPunjabiEnabledForSms)
                                             }
                                             val totalRemaining = emi.remainingInstallments * emi.installmentAmount
                                             val message = """

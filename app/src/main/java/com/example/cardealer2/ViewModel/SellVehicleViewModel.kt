@@ -5,11 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.EmiDetails
 import com.example.cardealer2.data.Product
-import com.example.cardealer2.data.VehicleSale
 import com.example.cardealer2.repository.CustomerRepository
 import com.example.cardealer2.repository.SaleRepository
 import com.example.cardealer2.repository.VehicleRepository
-import com.google.firebase.firestore.DocumentReference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +35,17 @@ class SellVehicleViewModel : ViewModel() {
     private val _salePrice = MutableStateFlow("")
     val salePrice: StateFlow<String> = _salePrice.asStateFlow()
     
+    // Down payment (for EMI)
+    private val _downPayment = MutableStateFlow("")
+    val downPayment: StateFlow<String> = _downPayment.asStateFlow()
+    
+    // Down payment split (for EMI)
+    private val _cashDownPayment = MutableStateFlow("")
+    val cashDownPayment: StateFlow<String> = _cashDownPayment.asStateFlow()
+    
+    private val _bankDownPayment = MutableStateFlow("")
+    val bankDownPayment: StateFlow<String> = _bankDownPayment.asStateFlow()
+    
     // EMI details
     private val _interestRate = MutableStateFlow("")
     val interestRate: StateFlow<String> = _interestRate.asStateFlow()
@@ -63,6 +72,19 @@ class SellVehicleViewModel : ViewModel() {
     // Customers list for selection
     private val _customers = MutableStateFlow<List<Customer>>(emptyList())
     val customers: StateFlow<List<Customer>> = _customers.asStateFlow()
+
+    // Document handover flags
+    private val _nocHandedOver = MutableStateFlow(false)
+    val nocHandedOver: StateFlow<Boolean> = _nocHandedOver.asStateFlow()
+
+    private val _rcHandedOver = MutableStateFlow(false)
+    val rcHandedOver: StateFlow<Boolean> = _rcHandedOver.asStateFlow()
+
+    private val _insuranceHandedOver = MutableStateFlow(false)
+    val insuranceHandedOver: StateFlow<Boolean> = _insuranceHandedOver.asStateFlow()
+
+    private val _otherDocsHandedOver = MutableStateFlow(false)
+    val otherDocsHandedOver: StateFlow<Boolean> = _otherDocsHandedOver.asStateFlow()
     
     init {
         loadCustomers()
@@ -80,7 +102,8 @@ class SellVehicleViewModel : ViewModel() {
             result.fold(
                 onSuccess = { product ->
                     _selectedVehicle.value = product
-                    _salePrice.value = product.price.toString()
+                    // Use sellingPrice if available (non-zero), otherwise fallback to price
+                    _salePrice.value = if (product.sellingPrice > 0) product.sellingPrice.toString() else product.price.toString()
                     _isLoading.value = false
                 },
                 onFailure = { exception ->
@@ -123,6 +146,30 @@ class SellVehicleViewModel : ViewModel() {
     }
     
     /**
+     * Set down payment
+     */
+    fun setDownPayment(value: String) {
+        _downPayment.value = value
+        if (_paymentType.value == "EMI") {
+            calculateEmi()
+        }
+    }
+    
+    /**
+     * Set cash down payment
+     */
+    fun setCashDownPayment(value: String) {
+        _cashDownPayment.value = value
+    }
+    
+    /**
+     * Set bank down payment
+     */
+    fun setBankDownPayment(value: String) {
+        _bankDownPayment.value = value
+    }
+    
+    /**
      * Set interest rate
      */
     fun setInterestRate(rate: String) {
@@ -149,15 +196,49 @@ class SellVehicleViewModel : ViewModel() {
     /**
      * Set selected customer
      */
-    fun setSelectedCustomer(customer: Customer) {
+    fun setSelectedCustomer(customer: Customer?) {
         _selectedCustomer.value = customer
+    }
+
+    fun setNocHandedOver(value: Boolean) {
+        _nocHandedOver.value = value
+    }
+
+    fun setRcHandedOver(value: Boolean) {
+        _rcHandedOver.value = value
+    }
+
+    fun setInsuranceHandedOver(value: Boolean) {
+        _insuranceHandedOver.value = value
+    }
+
+    fun setOtherDocsHandedOver(value: Boolean) {
+        _otherDocsHandedOver.value = value
     }
     
     /**
-     * Calculate EMI amount
+     * Calculate EMI amount using simple interest
+     * Formula: Total Interest = Principal × Interest Rate × Number of Periods
+     * Total Amount = Principal + Total Interest
+     * EMI = Total Amount ÷ Number of Payments
+     * Number of Payments = Duration (months) ÷ Frequency multiplier
+     *   - MONTHLY: multiplier = 1 (payments = months)
+     *   - QUARTERLY: multiplier = 3 (payments = months / 3)
+     *   - SEMI_ANNUALLY: multiplier = 6 (payments = months / 6)
+     *   - YEARLY: multiplier = 12 (payments = months / 12)
      */
     private fun calculateEmi() {
-        val principal = getSalePriceAmount()
+        val salePriceAmount = getSalePriceAmount()
+        val downPaymentAmount = getDownPaymentAmount()
+        
+        if (salePriceAmount <= 0) {
+            _calculatedEmi.value = 0.0
+            return
+        }
+        
+        // Principal = Sale Price - Down Payment
+        val principal = salePriceAmount - downPaymentAmount
+        
         if (principal <= 0) {
             _calculatedEmi.value = 0.0
             return
@@ -179,27 +260,56 @@ class SellVehicleViewModel : ViewModel() {
         val rate = rateStr.toDoubleOrNull() ?: 0.0
         val months = monthsStr.toIntOrNull() ?: 0
         
-        if (rate <= 0 || months <= 0) {
+        // Allow 0% interest (no-interest EMI) but disallow negative values or non-positive duration
+        if (rate < 0 || months <= 0) {
             _calculatedEmi.value = 0.0
             return
         }
         
-        // Convert annual rate to monthly rate
-        val monthlyRate = (rate / 100.0) / 12.0
+        // Calculate number of periods based on frequency (round down)
+        val periods = calculatePeriods(months, _frequency.value)
         
-        // EMI formula: P * r * (1 + r)^n / ((1 + r)^n - 1)
-        val emi = if (monthlyRate > 0) {
-            principal * monthlyRate * Math.pow(1 + monthlyRate, months.toDouble()) /
-                    (Math.pow(1 + monthlyRate, months.toDouble()) - 1)
-        } else {
-            principal / months
+        if (periods <= 0) {
+            _calculatedEmi.value = 0.0
+            return
         }
+        
+        // Convert rate percentage to decimal
+        val rateDecimal = rate / 100.0
+        
+        // Simple Interest: Total Interest = Principal × Rate × Periods
+        val totalInterest = principal * rateDecimal * periods
+        
+        // Total Amount = Principal + Total Interest
+        val totalAmount = principal + totalInterest
+        
+        // Calculate number of payments based on frequency (same as periods)
+        val numberOfPayments = periods
+        
+        // EMI = Total Amount ÷ Number of Payments
+        val emi = totalAmount / numberOfPayments
         
         _calculatedEmi.value = emi
     }
     
+    /**
+     * Calculate number of periods based on frequency (round down)
+     */
+    private fun calculatePeriods(months: Int, frequency: String): Int {
+        return when (frequency) {
+            "MONTHLY" -> months
+            "QUARTERLY" -> months / 3
+            "SEMI_ANNUALLY" -> months / 6
+            "YEARLY" -> months / 12
+            else -> months
+        }
+    }
+    
     private fun getSalePriceAmount(): Double =
         _salePrice.value.toDoubleOrNull() ?: 0.0
+    
+    private fun getDownPaymentAmount(): Double =
+        _downPayment.value.toDoubleOrNull() ?: 0.0
     
     /**
      * Calculate next due date based on frequency
@@ -209,6 +319,7 @@ class SellVehicleViewModel : ViewModel() {
         when (frequency) {
             "MONTHLY" -> calendar.add(Calendar.MONTH, 1)
             "QUARTERLY" -> calendar.add(Calendar.MONTH, 3)
+            "SEMI_ANNUALLY" -> calendar.add(Calendar.MONTH, 6)
             "YEARLY" -> calendar.add(Calendar.YEAR, 1)
             else -> calendar.add(Calendar.MONTH, 1)
         }
@@ -218,7 +329,7 @@ class SellVehicleViewModel : ViewModel() {
     /**
      * Complete the sale
      */
-    fun completeSale() {
+    fun completeSale(note: String = "", date: String = "") {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
@@ -228,6 +339,10 @@ class SellVehicleViewModel : ViewModel() {
             val customer = _selectedCustomer.value
             val paymentType = _paymentType.value
             val salePriceValue = getSalePriceAmount()
+            val nocHandedOver = _nocHandedOver.value
+            val rcHandedOver = _rcHandedOver.value
+            val insuranceHandedOver = _insuranceHandedOver.value
+            val otherDocsHandedOver = _otherDocsHandedOver.value
             
             if (vehicle == null) {
                 _error.value = "Please select a vehicle"
@@ -278,7 +393,13 @@ class SellVehicleViewModel : ViewModel() {
                         vehicleRef = vehicleRef,
                         purchaseType = "FULL_PAYMENT",
                         totalAmount = salePriceValue,
-                        downPayment = salePriceValue
+                        downPayment = salePriceValue,
+                        note = note,
+                        date = date,
+                        nocHandedOver = nocHandedOver,
+                        rcHandedOver = rcHandedOver,
+                        insuranceHandedOver = insuranceHandedOver,
+                        otherDocsHandedOver = otherDocsHandedOver
                     )
                     
                     result.fold(
@@ -296,11 +417,37 @@ class SellVehicleViewModel : ViewModel() {
                 "EMI" -> {
                     val rate = _interestRate.value.toDoubleOrNull() ?: 0.0
                     val months = _durationMonths.value.toIntOrNull() ?: 0
+                    val downPaymentValue = getDownPaymentAmount()
+                    val cashDownPaymentValue = _cashDownPayment.value.toDoubleOrNull() ?: 0.0
+                    val bankDownPaymentValue = _bankDownPayment.value.toDoubleOrNull() ?: 0.0
                     
-                    if (rate <= 0 || months <= 0) {
-                        _error.value = "Please enter valid EMI details"
+                    // Allow 0% interest (no-interest EMI) but disallow negative values or non-positive duration
+                    if (rate < 0 || months <= 0) {
+                        _error.value = "Please enter valid EMI details (rate cannot be negative and months must be > 0)"
                         _isLoading.value = false
                         return@launch
+                    }
+                    
+                    // Validate down payment is not greater than sale price
+                    if (downPaymentValue < 0 || downPaymentValue >= salePriceValue) {
+                        _error.value = "Down payment must be between 0 and sale price"
+                        _isLoading.value = false
+                        return@launch
+                    }
+                    
+                    // Validate cash and bank down payment amounts
+                    if (downPaymentValue > 0) {
+                        if (cashDownPaymentValue < 0 || bankDownPaymentValue < 0) {
+                            _error.value = "Cash and Bank amounts cannot be negative"
+                            _isLoading.value = false
+                            return@launch
+                        }
+                        val totalSplit = cashDownPaymentValue + bankDownPaymentValue
+                        if (kotlin.math.abs(totalSplit - downPaymentValue) > 0.01) {
+                            _error.value = "Cash + Bank amount must equal Down Payment amount"
+                            _isLoading.value = false
+                            return@launch
+                        }
                     }
                     
                     val emiAmount = _calculatedEmi.value
@@ -325,8 +472,16 @@ class SellVehicleViewModel : ViewModel() {
                         vehicleRef = vehicleRef,
                         purchaseType = "EMI",
                         totalAmount = salePriceValue,
-                        downPayment = 0.0,
-                        emiDetails = emiDetails
+                        downPayment = downPaymentValue,
+                        cashDownPayment = cashDownPaymentValue,
+                        bankDownPayment = bankDownPaymentValue,
+                        emiDetails = emiDetails,
+                        note = note,
+                        date = date,
+                        nocHandedOver = nocHandedOver,
+                        rcHandedOver = rcHandedOver,
+                        insuranceHandedOver = insuranceHandedOver,
+                        otherDocsHandedOver = otherDocsHandedOver
                     )
                     
                     result.fold(
@@ -356,8 +511,15 @@ class SellVehicleViewModel : ViewModel() {
         _durationMonths.value = ""
         _calculatedEmi.value = 0.0
         _salePrice.value = ""
+        _downPayment.value = ""
+        _cashDownPayment.value = ""
+        _bankDownPayment.value = ""
         _error.value = null
         _success.value = false
+        _nocHandedOver.value = false
+        _rcHandedOver.value = false
+        _insuranceHandedOver.value = false
+        _otherDocsHandedOver.value = false
     }
     
     /**

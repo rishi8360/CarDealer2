@@ -7,6 +7,7 @@ import com.example.cardealer2.data.Customer
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Transaction
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -115,14 +116,12 @@ object CustomerRepository {
 
             // ✅ Upload customer photos
             val uploadedPhotoUrls = uploadImagesToStorage(
-                images = customer.photoUrl,
-                folderPath = "customers/$customerId/photos"
+                images = customer.photoUrl
             )
 
             // ✅ Upload ID proof PDFs (ensure correct content type and extension)
             val uploadedIdProofUrls = uploadPdfsToStorage(
-                pdfs = customer.idProofImageUrls ?: emptyList(),
-                folderPath = "customers/$customerId/id_proofs"
+                pdfs = customer.idProofImageUrls ?: emptyList()
             )
 
             // ✅ Create Firestore data map
@@ -156,8 +155,7 @@ object CustomerRepository {
 
 
     private suspend fun uploadImagesToStorage(
-        images: List<String>,
-        folderPath: String
+        images: List<String>
     ): List<String> {
         val downloadUrls = mutableListOf<String>()
 
@@ -176,7 +174,7 @@ object CustomerRepository {
                 }
 
                 val fileName = "image_${System.currentTimeMillis()}_$index.jpg"
-                val imageRef = storageRef.child("$folderPath/$fileName")
+                val imageRef = storageRef.child(fileName)
 
                 // ✅ Upload the file (works for both content:// and file://)
                 imageRef.putFile(uri).await()
@@ -194,8 +192,7 @@ object CustomerRepository {
     }
 
     private suspend fun uploadPdfsToStorage(
-        pdfs: List<String>,
-        folderPath: String
+        pdfs: List<String>
     ): List<String> {
         val downloadUrls = mutableListOf<String>()
 
@@ -212,8 +209,8 @@ object CustomerRepository {
                     continue
                 }
 
-                val fileName = "document_${'$'}{System.currentTimeMillis()}_${'$'}index.pdf"
-                val fileRef = storageRef.child("${'$'}folderPath/${'$'}fileName")
+                val fileName = "document_${System.currentTimeMillis()}_$index.pdf"
+                val fileRef = storageRef.child(fileName)
 
                 // Ensure correct content type for PDFs
                 val metadata = StorageMetadata.Builder()
@@ -283,14 +280,12 @@ object CustomerRepository {
         return try {
             // ✅ Upload new customer photos (existing Firebase URLs are preserved, new local URIs are uploaded)
             val uploadedPhotoUrls = uploadImagesToStorage(
-                images = customer.photoUrl,
-                folderPath = "customers/${customer.customerId}/photos"
+                images = customer.photoUrl
             )
 
             // ✅ Upload new ID proof PDFs (existing Firebase URLs are preserved, new local URIs are uploaded)
             val uploadedIdProofUrls = uploadPdfsToStorage(
-                pdfs = customer.idProofImageUrls ?: emptyList(),
-                folderPath = "customers/${customer.customerId}/id_proofs"
+                pdfs = customer.idProofImageUrls ?: emptyList()
             )
 
             val customerData = hashMapOf(
@@ -346,6 +341,28 @@ object CustomerRepository {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error getting customer reference: ${e.message}", e)
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Decrease customer amount within a Firestore transaction
+     * This function should be called from within a Firestore transaction
+     */
+    fun decreaseCustomerAmount(
+        customerRef: com.google.firebase.firestore.DocumentReference,
+        amount: Int,
+        firestoreTransaction: Transaction
+    ) {
+        try {
+            val customerSnapshot = firestoreTransaction.get(customerRef)
+            val currentAmount = (customerSnapshot.get("amount") as? Number)?.toInt() ?: 0
+            val newAmount = currentAmount - amount
+            
+            firestoreTransaction.update(customerRef, "amount", newAmount)
+            Log.d(TAG, "✅ Decreased customer amount by $amount. New amount: $newAmount")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error decreasing customer amount: ${e.message}", e)
+            throw e // Re-throw to fail the transaction
         }
     }
 

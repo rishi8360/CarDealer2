@@ -31,6 +31,9 @@ import coil.compose.AsyncImage
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.ViewModel.ViewCustomersViewModel
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,10 +49,14 @@ fun ViewCustomerScreen(
         viewModel.loadCustomers()
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Customer List",
+                title = TranslationManager.translate("Customer List", isPunjabiEnabled),
                 navController = navController
             )
         }
@@ -77,12 +84,12 @@ fun ViewCustomerScreen(
 					trailingIcon = {
 						if (searchQuery.isNotEmpty()) {
 							IconButton(onClick = { searchQuery = "" }) {
-								Icon(Icons.Default.Close, contentDescription = "Clear search")
+								Icon(Icons.Default.Close, contentDescription = TranslationManager.translate("Clear search", isPunjabiEnabled))
 							}
 						}
 					},
 					singleLine = true,
-					label = { Text("Search by name or phone") }
+					label = { TranslatedText("Search by name or phone") }
 				)
 
 				val filteredCustomers = remember(customers, searchQuery) {
@@ -107,8 +114,8 @@ fun ViewCustomerScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = error ?: "Error loading customers",
+                            TranslatedText(
+                                englishText = error ?: "Error loading customers",
                                 color = MaterialTheme.colorScheme.error,
                                 textAlign = TextAlign.Center
                             )
@@ -120,8 +127,8 @@ fun ViewCustomerScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No customers available",
+                            TranslatedText(
+                                englishText = "No customers available",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -135,8 +142,8 @@ fun ViewCustomerScreen(
 							modifier = Modifier.fillMaxSize(),
 							contentAlignment = Alignment.Center
 						) {
-							Text(
-								text = "No results found",
+							TranslatedText(
+								englishText = "No results found",
 								style = MaterialTheme.typography.bodyLarge,
 								color = MaterialTheme.colorScheme.onSurfaceVariant
 							)
@@ -167,6 +174,9 @@ fun CustomerCard(
     customer: Customer,
     onClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     Box(
         modifier = Modifier
@@ -239,11 +249,14 @@ fun CustomerCard(
 
                 val displayAmount = kotlin.math.abs(customer.amount)
 
+                val amountText = if (owesCustomer) {
+                    "${TranslationManager.translate("You Owe ₹", isPunjabiEnabled)}$displayAmount"
+                } else {
+                    "${TranslationManager.translate("To Receive ₹", isPunjabiEnabled)}$displayAmount"
+                }
+                
                 Text(
-                    text = if (owesCustomer)
-                        "You Owe ₹$displayAmount"
-                    else
-                        "To Receive ₹$displayAmount",
+                    text = amountText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = amountColor,
                     fontWeight = FontWeight.SemiBold

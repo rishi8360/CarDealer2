@@ -435,8 +435,9 @@ object VehicleRepository {
             val storage = Firebase.storage
             val storageRef = storage.reference
 
-            for (uri in imageUris) {
-                val imageRef = storageRef.child("vehicle_images/$brandId/$productId/${System.currentTimeMillis()}.jpg")
+            for ((index, uri) in imageUris.withIndex()) {
+                val fileName = "image_${System.currentTimeMillis()}_$index.jpg"
+                val imageRef = storageRef.child(fileName)
                 imageRef.putFile(uri).await()                       // Upload image
                 val url = imageRef.downloadUrl.await().toString()   // Get download URL
                 downloadUrls.add(url)
@@ -473,7 +474,7 @@ object VehicleRepository {
                     }
 
                     val fileName = "image_${System.currentTimeMillis()}_$index.jpg"
-                    val imageRef = storageRef.child("vehicle_images/$brandId/$productId/$fileName")
+                    val imageRef = storageRef.child(fileName)
                     imageRef.putFile(uri).await()
                     val downloadUrl = imageRef.downloadUrl.await().toString()
                     downloadUrls.add(downloadUrl)
@@ -513,7 +514,7 @@ object VehicleRepository {
                     }
 
                     val fileName = "${documentType}_${System.currentTimeMillis()}_$index.pdf"
-                    val fileRef = storageRef.child("vehicle_documents/$brandId/$productId/$fileName")
+                    val fileRef = storageRef.child(fileName)
 
                     // Ensure correct content type for PDFs
                     val metadata = com.google.firebase.storage.StorageMetadata.Builder()
@@ -1023,12 +1024,19 @@ object VehicleRepository {
                 productId = updatedProduct.productId,
                 documentType = "insurance"
             )
+            val uploadedVehicleOtherDocUrls = uploadPdfsToStorage(
+                pdfUris = updatedProduct.vehicleOtherDoc,
+                brandId = updatedProduct.brandId,
+                productId = updatedProduct.productId,
+                documentType = "vehicleOtherDoc"
+            )
 
             // Get uploaded URLs (or use empty list if upload failed)
             val finalImageUrls = if (uploadedImageUrls.isSuccess) uploadedImageUrls.getOrThrow() else updatedProduct.images
             val finalNocUrls = if (uploadedNocUrls.isSuccess) uploadedNocUrls.getOrThrow() else updatedProduct.noc
             val finalRcUrls = if (uploadedRcUrls.isSuccess) uploadedRcUrls.getOrThrow() else updatedProduct.rc
             val finalInsuranceUrls = if (uploadedInsuranceUrls.isSuccess) uploadedInsuranceUrls.getOrThrow() else updatedProduct.insurance
+            val finalVehicleOtherDocUrls = if (uploadedVehicleOtherDocUrls.isSuccess) uploadedVehicleOtherDocUrls.getOrThrow() else updatedProduct.vehicleOtherDoc
 
             // Resolve brand reference for the updated product's brand name (kept in updatedProduct.brandId)
             val updatedBrandRef = resolveBrandRefByName(updatedProduct.brandId)
@@ -1047,12 +1055,14 @@ object VehicleRepository {
                 "lastService" to updatedProduct.lastService,
                 "previousOwners" to updatedProduct.previousOwners,
                 "price" to updatedProduct.price,
+                "sellingPrice" to updatedProduct.sellingPrice,
                 "type" to updatedProduct.type,
                 "year" to updatedProduct.year,
                 // New fields
                 "noc" to finalNocUrls,  // ✅ Use uploaded URLs
                 "rc" to finalRcUrls,  // ✅ Use uploaded URLs
                 "insurance" to finalInsuranceUrls,  // ✅ Use uploaded URLs
+                "vehicleOtherDoc" to finalVehicleOtherDocUrls,
                 "brokerOrMiddleMan" to updatedProduct.brokerOrMiddleMan,
                 "owner" to updatedProduct.owner,
                 "sold" to updatedProduct.sold
@@ -1278,6 +1288,7 @@ object VehicleRepository {
                     "lastService" to product.lastService,
                     "previousOwners" to product.previousOwners,
                     "price" to product.price,
+                    "sellingPrice" to product.sellingPrice,
                     "type" to product.type,
                     "year" to product.year,
                     // New fields
@@ -1367,6 +1378,76 @@ object VehicleRepository {
             Result.success(catalogId)
         } catch (e: Exception) {
             println("❌ Error creating catalog: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Create catalog document with CatalogProduct list (productRef + sellingPrice) and recipient name
+     * First clears existing Catalog documents, then creates a new one
+     */
+    suspend fun createCatalogWithProducts(
+        catalogProducts: List<com.example.cardealer2.data.CatalogProduct>,
+        recipientName: String
+    ): Result<String> {
+        return try {
+            val catalogCollection = db.collection("Catalog")
+            
+            // First, clear all existing Catalog documents
+            val existingCatalogs = catalogCollection.get().await()
+            for (document in existingCatalogs.documents) {
+                document.reference.delete().await()
+            }
+            println("✅ Cleared ${existingCatalogs.documents.size} existing catalog document(s)")
+            
+            // Create new catalog document
+            val catalogDocRef = catalogCollection.document()
+            val catalogId = catalogDocRef.id
+
+            // Convert CatalogProduct list to Firestore-compatible format
+            val productsData = catalogProducts.map { catalogProduct ->
+                hashMapOf(
+                    "productRef" to catalogProduct.productRef,
+                    "sellingPrice" to catalogProduct.sellingPrice
+                )
+            }
+
+            val catalogData = hashMapOf(
+                "products" to productsData,
+                "createdAt" to System.currentTimeMillis(),
+                "productCount" to catalogProducts.size,
+                "recipientName" to recipientName
+            )
+
+            catalogDocRef.set(catalogData).await()
+            
+            println("✅ Catalog created successfully with ID: $catalogId (with selling prices and recipient name: $recipientName)")
+            Result.success(catalogId)
+        } catch (e: Exception) {
+            println("❌ Error creating catalog: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get product DocumentReference by chassis number
+     */
+    suspend fun getProductReferenceByChassis(chassisNumber: String): Result<DocumentReference> {
+        return try {
+            val querySnapshot = productCollection
+                .whereEqualTo("chassisNumber", chassisNumber)
+                .limit(1)
+                .get()
+                .await()
+
+            val document = querySnapshot.documents.firstOrNull()
+            if (document != null) {
+                Result.success(document.reference)
+            } else {
+                Result.failure(Exception("Product with chassis $chassisNumber not found"))
+            }
+        } catch (e: Exception) {
+            println("❌ Error getting product reference by chassis: ${e.message}")
             Result.failure(e)
         }
     }

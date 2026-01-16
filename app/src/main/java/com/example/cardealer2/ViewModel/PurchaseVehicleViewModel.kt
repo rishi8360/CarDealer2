@@ -21,6 +21,7 @@ data class PurchaseVehicleUiState(
     val customers: List<Customer> = emptyList(),
     val brokers: List<Broker> = emptyList(),
     val maxOrderNo: Int = 0,
+    val maxTransactionNo: Int = 0,
     val error: String? = null,
     val isAddingCustomer: Boolean = false,
     val addCustomerSuccess: Boolean = false,
@@ -69,6 +70,13 @@ class PurchaseVehicleViewModel(
             // Collect maxOrderNo from repository StateFlow (updated via Firebase listener)
             purchaseRepository.maxOrderNo.collect { maxOrderNo ->
                 _uiState.value = _uiState.value.copy(maxOrderNo = maxOrderNo)
+            }
+        }
+        
+        viewModelScope.launch {
+            // Collect maxTransactionNo from repository StateFlow (updated via Firebase listener)
+            purchaseRepository.maxTransactionNo.collect { maxTransactionNo ->
+                _uiState.value = _uiState.value.copy(maxTransactionNo = maxTransactionNo)
             }
         }
     }
@@ -225,6 +233,7 @@ class PurchaseVehicleViewModel(
         lastService: String,
         previousOwners: String,
         price: String,
+        sellingPrice: String,
         year: String,
         type: String,
         purchaseType: String?,
@@ -233,6 +242,7 @@ class PurchaseVehicleViewModel(
         nocPdfs: List<String>,
         rcPdfs: List<String>,
         insurancePdfs: List<String>,
+        vehicleOtherDocPdfs: List<String>,
         gstIncluded: Boolean,
         gstPercentage: String,
         brokerFeeIncluded: Boolean,
@@ -241,7 +251,9 @@ class PurchaseVehicleViewModel(
         brokerFeeBank: String,
         cashAmount: String,
         bankAmount: String,
-        creditAmount: String
+        creditAmount: String,
+        note: String = "",
+        date: String = ""
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -343,10 +355,12 @@ class PurchaseVehicleViewModel(
                 val nocUrlsResult = vehicleRepository.uploadPdfsToStorage(nocPdfs, brandId, modelName, "noc")
                 val rcUrlsResult = vehicleRepository.uploadPdfsToStorage(rcPdfs, brandId, modelName, "rc")
                 val insuranceUrlsResult = vehicleRepository.uploadPdfsToStorage(insurancePdfs, brandId, modelName, "insurance")
+                val vehicleOtherDocUrlsResult = vehicleRepository.uploadPdfsToStorage(vehicleOtherDocPdfs, brandId, modelName, "vehicleOtherDoc")
                 
                 val nocUrls = if (nocUrlsResult.isSuccess) nocUrlsResult.getOrThrow() else emptyList()
                 val rcUrls = if (rcUrlsResult.isSuccess) rcUrlsResult.getOrThrow() else emptyList()
                 val insuranceUrls = if (insuranceUrlsResult.isSuccess) insuranceUrlsResult.getOrThrow() else emptyList()
+                val vehicleOtherDocUrls = if (vehicleOtherDocUrlsResult.isSuccess) vehicleOtherDocUrlsResult.getOrThrow() else emptyList()
                 
                 // 2️⃣ Resolve all document references
                 val brandRefsResult = vehicleRepository.resolveBrandReferences(brandId)
@@ -417,11 +431,13 @@ class PurchaseVehicleViewModel(
                     lastService = lastService,
                     previousOwners = previousOwners.toIntOrNull() ?: 0,
                     price = price.toIntOrNull() ?: 0,
+                    sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
                     type = type,
                     noc = nocUrls, // Already uploaded
                     rc = rcUrls, // Already uploaded
                     insurance = insuranceUrls, // Already uploaded
+                    vehicleOtherDoc = vehicleOtherDocUrls, // Already uploaded
                     brokerOrMiddleMan = brokerOrMiddleMan,
                     owner = owner
                 )
@@ -442,10 +458,13 @@ class PurchaseVehicleViewModel(
                     nocUrls = nocUrls,
                     rcUrls = rcUrls,
                     insuranceUrls = insuranceUrls,
+                    vehicleOtherDocUrls = vehicleOtherDocUrls,
                     brandDocRef = brandDocRef,
                     brandNameRef = brandNameRef,
                     brokerOrMiddleManRef = brokerOrMiddleManRef,
-                    ownerRef = ownerRef
+                    ownerRef = ownerRef,
+                    note = note,
+                    date = date
                 )
                 
                 if (purchaseResult.isSuccess) {

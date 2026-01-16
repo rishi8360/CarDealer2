@@ -35,6 +35,8 @@ import androidx.compose.runtime.LaunchedEffect
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.EditActionButton
 import com.example.cardealer2.components.TransactionSection
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
@@ -46,14 +48,16 @@ fun CustomerDetailsScreen(
     val customers by viewModel.customers.collectAsState()
     val customer = customers.firstOrNull { it.customerId == customerId }
     val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     var selectedImageUrl by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = customer?.name ?: "Customer Details",
-                subtitle = if (customer != null) "Customer Details" else null,
+                title = customer?.name ?: TranslationManager.translate("Customer Details", isPunjabiEnabled),
+                subtitle = if (customer != null) TranslationManager.translate("Customer Details", isPunjabiEnabled) else null,
                 navController = navController,
                 actions = {
                     if (customer != null) {
@@ -81,8 +85,8 @@ fun CustomerDetailsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Customer not found",
+                        TranslatedText(
+                            englishText = "Customer not found",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -220,7 +224,10 @@ fun CustomerDetailsScreen(
                 // Amount Card - Compact design
                 val owesCustomer = customer.amount < 0
                 val amountText = "₹${kotlin.math.abs(customer.amount)}"
-                val amountLabel = if (owesCustomer) "You Owe" else "They Owe"
+                val amountLabel = if (owesCustomer) 
+                    TranslationManager.translate("You Owe", isPunjabiEnabled) 
+                else 
+                    TranslationManager.translate("They Owe", isPunjabiEnabled)
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -306,8 +313,8 @@ fun CustomerDetailsScreen(
                                 .padding(20.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(
-                                text = "Contact Information",
+                            TranslatedText(
+                                englishText = "Contact Information",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
@@ -328,15 +335,15 @@ fun CustomerDetailsScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Column {
-                                    Text(
-                                        text = "Address",
+                                    TranslatedText(
+                                        englishText = "Address",
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontSize = 12.sp
                                         ),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = "No address provided",
+                                        text = TranslationManager.translate("No address provided", isPunjabiEnabled),
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = FontWeight.Medium,
                                             fontSize = 14.sp
@@ -363,8 +370,8 @@ fun CustomerDetailsScreen(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "Identity Proof",
+                        TranslatedText(
+                            englishText = "Identity Proof",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
@@ -388,14 +395,14 @@ fun CustomerDetailsScreen(
                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 Text(
-                                    text = customer.idProofType.ifBlank { "Not specified" },
+                                    text = customer.idProofType.ifBlank { TranslationManager.translate("Not specified", isPunjabiEnabled) },
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 12.sp
                                     ),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = customer.idProofNumber.ifBlank { "Not provided" },
+                                    text = customer.idProofNumber.ifBlank { TranslationManager.translate("Not provided", isPunjabiEnabled) },
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 14.sp
@@ -407,8 +414,8 @@ fun CustomerDetailsScreen(
                         if (customer.idProofImageUrls.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            Text(
-                                text = "Documents",
+                            TranslatedText(
+                                englishText = "Documents",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp
@@ -442,21 +449,22 @@ fun CustomerDetailsScreen(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.PictureAsPdf,
-                                                contentDescription = "PDF Document",
+                                                contentDescription = TranslationManager.translate("PDF Document", isPunjabiEnabled),
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.size(32.dp)
                                             )
                                             Column(modifier = Modifier.weight(1f)) {
+                                                val docText = "${TranslationManager.translate("ID Proof Document", isPunjabiEnabled)} ${index + 1}"
                                                 Text(
-                                                    text = "ID Proof Document ${index + 1}",
+                                                    text = docText,
                                                     style = MaterialTheme.typography.bodyMedium.copy(
                                                         fontWeight = FontWeight.Medium,
                                                         fontSize = 14.sp
                                                     ),
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                                 )
-                                                Text(
-                                                    text = "Tap to open PDF",
+                                                TranslatedText(
+                                                    englishText = "Tap to open PDF",
                                                     style = MaterialTheme.typography.bodySmall.copy(
                                                         fontSize = 12.sp
                                                     ),
@@ -500,7 +508,7 @@ fun CustomerDetailsScreen(
             ) {
                 AsyncImage(
                     model = imageUrl,
-                    contentDescription = "Full size image",
+                    contentDescription = TranslationManager.translate("Full size image", isPunjabiEnabled),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )

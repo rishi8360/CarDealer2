@@ -454,3 +454,6 @@ Each document contains:
 6. **All capital transactions are linked to Purchase/Sale via DocumentReference**
 
 
+
+
+

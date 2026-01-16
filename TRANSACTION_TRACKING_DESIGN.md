@@ -675,3 +675,6 @@ transactionsCollection
 This design provides a complete transaction tracking system that integrates seamlessly with your existing purchase and sale flows! 🎉
 
 
+
+
+

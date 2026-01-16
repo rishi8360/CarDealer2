@@ -38,6 +38,9 @@ import com.example.cardealer2.utility.FilterableDropdownFieldWithDialog
 import com.example.cardealer2.utility.ImagePickerField
 import com.example.cardealer2.utility.YearPickerField
 import com.example.cardealer2.utility.smartPopBack
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,11 +99,13 @@ fun EditVehicleScreen(
     var lastService by rememberSaveable { mutableStateOf("") }
     var previousOwners by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
+    var sellingPrice by rememberSaveable { mutableStateOf("") }
     var year by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var nocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var rcPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var insurancePdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var vehicleOtherDocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     
     // Unsaved changes dialog
     var showUnsavedDialog by remember { mutableStateOf(false) }
@@ -122,11 +127,13 @@ fun EditVehicleScreen(
     var initialLastService by rememberSaveable { mutableStateOf("") }
     var initialPreviousOwners by rememberSaveable { mutableStateOf("") }
     var initialPrice by rememberSaveable { mutableStateOf("") }
+    var initialSellingPrice by rememberSaveable { mutableStateOf("") }
     var initialYear by rememberSaveable { mutableStateOf("") }
     var initialType by rememberSaveable { mutableStateOf("") }
     var initialNocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var initialRcPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var initialInsurancePdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var initialVehicleOtherDocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var initialChassisNumber by rememberSaveable { mutableStateOf("") }
     
     // Load product data into form fields
@@ -142,11 +149,13 @@ fun EditVehicleScreen(
             lastService = p.lastService
             previousOwners = p.previousOwners.toString()
             price = p.price.toString()
+            sellingPrice = p.sellingPrice.toString()
             year = p.year.toString()
             type = p.type
             nocPdfs = p.noc
             rcPdfs = p.rc
             insurancePdfs = p.insurance
+            vehicleOtherDocPdfs = p.vehicleOtherDoc
             
             // Set initial snapshot after loading
             initialBrandName = p.brandId
@@ -158,11 +167,13 @@ fun EditVehicleScreen(
             initialLastService = p.lastService
             initialPreviousOwners = p.previousOwners.toString()
             initialPrice = p.price.toString()
+            initialSellingPrice = p.sellingPrice.toString()
             initialYear = p.year.toString()
             initialType = p.type
             initialNocPdfs = p.noc
             initialRcPdfs = p.rc
             initialInsurancePdfs = p.insurance
+            initialVehicleOtherDocPdfs = p.vehicleOtherDoc
             initialChassisNumber = p.chassisNumber
         }
     }
@@ -252,6 +263,7 @@ fun EditVehicleScreen(
         lastService,
         previousOwners,
         price,
+        sellingPrice,
         year,
         type,
         nocPdfs,
@@ -270,6 +282,7 @@ fun EditVehicleScreen(
         initialLastService,
         initialPreviousOwners,
         initialPrice,
+        initialSellingPrice,
         initialYear,
         initialType,
         initialNocPdfs,
@@ -290,25 +303,36 @@ fun EditVehicleScreen(
                 lastService != initialLastService ||
                 previousOwners != initialPreviousOwners ||
                 price != initialPrice ||
+                sellingPrice != initialSellingPrice ||
                 year != initialYear ||
                 type != initialType ||
                 nocPdfs != initialNocPdfs ||
                 rcPdfs != initialRcPdfs ||
                 insurancePdfs != initialInsurancePdfs ||
+                vehicleOtherDocPdfs != initialVehicleOtherDocPdfs ||
                 chassisNumberState != initialChassisNumber
         )
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    var backButtonClicked by remember { mutableStateOf(false) }
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Edit Vehicle",
+                title = TranslationManager.translate("Edit Vehicle", isPunjabiEnabled),
                 navController = navController,
                 onBackClick = {
-                    if (isDirty && !vehicleUiState.isLoading) {
-                        showUnsavedDialog = true
-                    } else {
-                        navController.smartPopBack()
+                    if (!backButtonClicked) {
+                        backButtonClicked = true
+                        if (isDirty && !vehicleUiState.isLoading) {
+                            showUnsavedDialog = true
+                        } else {
+                            navController.smartPopBack()
+                        }
                     }
                 },
                 actions = {
@@ -329,30 +353,56 @@ fun EditVehicleScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Purchase Type Selection
-            Text(
-                text = "Purchase Type",
+            TranslatedText(
+                englishText = "Purchase Type",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             
+            val purchaseTypeItems = remember(isPunjabiEnabled) {
+                listOf(
+                    TranslationManager.translate("Direct", isPunjabiEnabled),
+                    TranslationManager.translate("Middle Man", isPunjabiEnabled),
+                    TranslationManager.translate("Broker", isPunjabiEnabled)
+                )
+            }
+            
             FilterableDropdownField(
-                label = "Select Purchase Type",
-                items = listOf("Direct", "Middle Man", "Broker"),
+                label = TranslationManager.translate("Select Purchase Type", isPunjabiEnabled),
+                items = purchaseTypeItems,
                 selectedItem = purchaseType,
-                onItemSelected = { purchaseType = it },
+                onItemSelected = { 
+                    // Convert translated text back to English for internal use
+                    purchaseType = when (it) {
+                        TranslationManager.translate("Direct", isPunjabiEnabled) -> "Direct"
+                        TranslationManager.translate("Middle Man", isPunjabiEnabled) -> "Middle Man"
+                        TranslationManager.translate("Broker", isPunjabiEnabled) -> "Broker"
+                        else -> it
+                    }
+                },
                 itemToString = { it },
                 modifier = Modifier.fillMaxWidth()
             )
+            
+            val currentPurchaseType = remember(purchaseType, isPunjabiEnabled) {
+                when (purchaseType) {
+                    "Direct" -> TranslationManager.translate("Direct", isPunjabiEnabled)
+                    "Middle Man" -> TranslationManager.translate("Middle Man", isPunjabiEnabled)
+                    "Broker" -> TranslationManager.translate("Broker", isPunjabiEnabled)
+                    else -> purchaseType
+                }
+            }
             
             when (purchaseType) {
                 "Direct" -> {
                     // Direct customer selection
                     FilterableDropdownFieldWithDialog(
-                        label = "Select Owner",
+                        label = TranslationManager.translate("Select Owner", isPunjabiEnabled),
                         items = uiState.customerNames,
                         selectedItem = selectedCustomerMiddleManBroker,
                         onItemSelected = { selectedCustomerMiddleManBroker = it },
@@ -371,7 +421,7 @@ fun EditVehicleScreen(
                 "Middle Man" -> {
                     // Middle Man selection - show dropdown
                     FilterableDropdownFieldWithDialog(
-                        label = "Select Middle Man",
+                        label = TranslationManager.translate("Select Middle Man", isPunjabiEnabled),
                         items = uiState.customerNames,
                         selectedItem = selectedCustomerMiddleManBroker,
                         onItemSelected = { selectedCustomerMiddleManBroker = it },
@@ -389,7 +439,7 @@ fun EditVehicleScreen(
 
                     // Owner Name field
                     FilterableDropdownFieldWithDialog(
-                        label = "Select Owner (Customer)",
+                        label = TranslationManager.translate("Select Owner (Customer)", isPunjabiEnabled),
                         items = uiState.customerNames,
                         selectedItem = selectedOwner,
                         onItemSelected = { selectedOwner = it },
@@ -408,7 +458,7 @@ fun EditVehicleScreen(
                 "Broker" -> {
                     // Broker selection
                     FilterableDropdownFieldWithDialog(
-                        label = "Select Broker",
+                        label = TranslationManager.translate("Select Broker", isPunjabiEnabled),
                         items = uiState.brokerNames,
                         selectedItem = selectedCustomerMiddleManBroker,
                         onItemSelected = { selectedCustomerMiddleManBroker = it },
@@ -428,7 +478,7 @@ fun EditVehicleScreen(
                     
                     // Owner Name field
                     FilterableDropdownFieldWithDialog(
-                        label = "Select Owner (Customer)",
+                        label = TranslationManager.translate("Select Owner (Customer)", isPunjabiEnabled),
                         items = uiState.customerNames,
                         selectedItem = selectedOwner,
                         onItemSelected = { selectedOwner = it },
@@ -449,14 +499,14 @@ fun EditVehicleScreen(
             HorizontalDivider()
             
             // Vehicle Details Section
-            Text(
-                text = "Vehicle Details",
+            TranslatedText(
+                englishText = "Vehicle Details",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             
             FilterableDropdownField(
-                label = "Brand Name",
+                label = TranslationManager.translate("Brand Name", isPunjabiEnabled),
                 items = brandNames,
                 selectedItem = brandName,
                 onItemSelected = { brandName = it },
@@ -464,17 +514,31 @@ fun EditVehicleScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             
+            val vehicleTypeItems = remember(isPunjabiEnabled) {
+                listOf(
+                    TranslationManager.translate("Bike", isPunjabiEnabled),
+                    TranslationManager.translate("Car", isPunjabiEnabled)
+                )
+            }
+            
             FilterableDropdownField(
-                label = "Type of Vehicle",
-                items = listOf("Bike", "Car"),
+                label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
+                items = vehicleTypeItems,
                 selectedItem = type,
-                onItemSelected = { type = it },
+                onItemSelected = { 
+                    // Convert translated text back to English for internal use
+                    type = when (it) {
+                        TranslationManager.translate("Bike", isPunjabiEnabled) -> "Bike"
+                        TranslationManager.translate("Car", isPunjabiEnabled) -> "Car"
+                        else -> it
+                    }
+                },
                 itemToString = { it },
                 modifier = Modifier.fillMaxWidth()
             )
             
             FilterableDropdownField(
-                label = "Name of Model",
+                label = TranslationManager.translate("Name of Model", isPunjabiEnabled),
                 items = models,
                 selectedItem = modelName,
                 onItemSelected = { modelName = it },
@@ -483,7 +547,7 @@ fun EditVehicleScreen(
             )
             
             FilterableDropdownField(
-                label = "Colour",
+                label = TranslationManager.translate("Colour", isPunjabiEnabled),
                 items = colourList,
                 selectedItem = colour,
                 onItemSelected = { colour = it },
@@ -500,17 +564,35 @@ fun EditVehicleScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             
+            val conditionItems = remember(isPunjabiEnabled) {
+                listOf(
+                    TranslationManager.translate("Excellent", isPunjabiEnabled),
+                    TranslationManager.translate("Good", isPunjabiEnabled),
+                    TranslationManager.translate("Fair", isPunjabiEnabled),
+                    TranslationManager.translate("Poor", isPunjabiEnabled)
+                )
+            }
+            
             FilterableDropdownField(
-                label = "Condition",
-                items = listOf("Excellent", "Good", "Fair", "Poor"),
+                label = TranslationManager.translate("Condition", isPunjabiEnabled),
+                items = conditionItems,
                 selectedItem = condition,
-                onItemSelected = { condition = it },
+                onItemSelected = { 
+                    // Convert translated text back to English for internal use
+                    condition = when (it) {
+                        TranslationManager.translate("Excellent", isPunjabiEnabled) -> "Excellent"
+                        TranslationManager.translate("Good", isPunjabiEnabled) -> "Good"
+                        TranslationManager.translate("Fair", isPunjabiEnabled) -> "Fair"
+                        TranslationManager.translate("Poor", isPunjabiEnabled) -> "Poor"
+                        else -> it
+                    }
+                },
                 itemToString = { it },
                 modifier = Modifier.fillMaxWidth()
             )
             
             ImagePickerField(
-                label = "Vehicle Images",
+                label = TranslationManager.translate("Vehicle Images", isPunjabiEnabled),
                 images = images,
                 onImagesChanged = { images = it },
                 modifier = Modifier.fillMaxWidth()
@@ -523,12 +605,12 @@ fun EditVehicleScreen(
                 OutlinedTextField(
                     value = kms,
                     onValueChange = { kms = it },
-                    label = { Text("KMs *") },
+                    label = { TranslatedText("KMs *") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 YearPickerField(
-                    label = "Year *",
+                    label = TranslationManager.translate("Year *", isPunjabiEnabled),
                     selectedYear = year,
                     onYearSelected = { year = it },
                     modifier = Modifier.weight(1f)
@@ -542,21 +624,29 @@ fun EditVehicleScreen(
                 OutlinedTextField(
                     value = price,
                     onValueChange = { price = it },
-                    label = { Text("Price *") },
+                    label = { TranslatedText("Purchase Price *") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 OutlinedTextField(
                     value = previousOwners,
                     onValueChange = { previousOwners = it },
-                    label = { Text("Previous Owners") },
+                    label = { TranslatedText("Previous Owners") },
                     modifier = Modifier.weight(1f),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
             }
             
+            OutlinedTextField(
+                value = sellingPrice,
+                onValueChange = { sellingPrice = it },
+                label = { TranslatedText("Selling Price") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            
             DatePickerField(
-                label = "Last Service",
+                label = TranslationManager.translate("Last Service", isPunjabiEnabled),
                 selectedDate = lastService,
                 onDateSelected = { lastService = it },
                 modifier = Modifier.fillMaxWidth()
@@ -564,30 +654,37 @@ fun EditVehicleScreen(
             
             HorizontalDivider()
             
-            Text(
-                text = "Document Details",
+            TranslatedText(
+                englishText = "Document Details",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             
             PdfPickerField(
-                label = "NOC PDFs",
+                label = TranslationManager.translate("NOC PDFs", isPunjabiEnabled),
                 pdfUrls = nocPdfs,
                 onPdfChange = { nocPdfs = it },
                 modifier = Modifier.fillMaxWidth()
             )
             
             PdfPickerField(
-                label = "RC PDFs",
+                label = TranslationManager.translate("RC PDFs", isPunjabiEnabled),
                 pdfUrls = rcPdfs,
                 onPdfChange = { rcPdfs = it },
                 modifier = Modifier.fillMaxWidth()
             )
             
             PdfPickerField(
-                label = "Insurance PDFs",
+                label = TranslationManager.translate("Insurance PDFs", isPunjabiEnabled),
                 pdfUrls = insurancePdfs,
                 onPdfChange = { insurancePdfs = it },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            PdfPickerField(
+                label = TranslationManager.translate("Other Vehicle Documents", isPunjabiEnabled),
+                pdfUrls = vehicleOtherDocPdfs,
+                onPdfChange = { vehicleOtherDocPdfs = it },
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -609,7 +706,7 @@ fun EditVehicleScreen(
                     modifier = Modifier.weight(1f),
                     enabled = !vehicleUiState.isLoading
                 ) {
-                    Text("Cancel")
+                    TranslatedText("Cancel")
                 }
 
                 Button(
@@ -639,11 +736,13 @@ fun EditVehicleScreen(
                             lastService = lastService,
                             previousOwners = previousOwners,
                             price = price,
+                            sellingPrice = sellingPrice,
                             year = year,
                             type = type,
                             nocPdfs = nocPdfs,
                             rcPdfs = rcPdfs,
                             insurancePdfs = insurancePdfs,
+                            vehicleOtherDocPdfs = vehicleOtherDocPdfs,
                             brokerOrMiddleMan = brokerOrMiddleMan,
                             owner = owner
                         )
@@ -654,7 +753,7 @@ fun EditVehicleScreen(
                     if (vehicleUiState.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Update Vehicle")
+                        TranslatedText("Update Vehicle")
                     }
                 }
             }
@@ -721,8 +820,8 @@ fun EditVehicleScreen(
         AlertDialog(
             onDismissRequest = { if (!vehicleUiState.isLoading) showDeleteDialog = false },
             icon = {},
-            title = { Text("Delete Vehicle") },
-            text = { Text("Are you sure you want to delete this vehicle? This action cannot be undone.") },
+            title = { TranslatedText("Delete Vehicle") },
+            text = { TranslatedText("Are you sure you want to delete this vehicle? This action cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -750,8 +849,8 @@ fun EditVehicleScreen(
         AlertDialog(
             onDismissRequest = { if (!vehicleUiState.isLoading) showUnsavedDialog = false },
             icon = {},
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Do you want to discard them and go back?") },
+            title = { TranslatedText("Discard changes?") },
+            text = { TranslatedText("You have unsaved changes. Do you want to discard them and go back?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -760,14 +859,14 @@ fun EditVehicleScreen(
                     },
                     enabled = !vehicleUiState.isLoading
                 ) {
-                    Text("Discard")
+                    TranslatedText("Discard")
                 }
             },
             dismissButton = {
                 OutlinedButton(
                     onClick = { if (!vehicleUiState.isLoading) showUnsavedDialog = false }
                 ) {
-                    Text("Keep Editing")
+                    TranslatedText("Keep Editing")
                 }
             }
         )

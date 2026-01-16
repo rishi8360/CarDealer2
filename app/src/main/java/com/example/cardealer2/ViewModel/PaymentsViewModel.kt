@@ -3,6 +3,7 @@ package com.example.cardealer2.ViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Customer
+import com.example.cardealer2.data.EmiDetails
 import com.example.cardealer2.data.Product
 import com.example.cardealer2.data.VehicleSale
 import com.example.cardealer2.repository.CustomerRepository
@@ -38,7 +39,8 @@ class PaymentsViewModel : ViewModel() {
     data class SaleWithDetails(
         val sale: VehicleSale,
         val customer: CustomerDetails?,
-        val vehicle: Product?
+        val vehicle: Product?,
+        val emiDetails: EmiDetails? = null  // EmiDetails fetched from separate collection
     )
     
     private val _salesWithDetails = MutableStateFlow<List<SaleWithDetails>>(emptyList())
@@ -76,45 +78,49 @@ class PaymentsViewModel : ViewModel() {
     )
     
     init {
-        loadSales()
+        // No longer auto-loading on init - manual loading only
     }
     
     /**
-     * Load all sales and populate details
+     * Manually load EMI schedule with date range filtering
+     * @param fromDate Start of date range (timestamp in milliseconds, start of day)
+     * @param toDate End of date range (timestamp in milliseconds, end of day)
      */
-    fun loadSales() {
+    fun loadEmiScheduleWithDateRange(fromDate: Long, toDate: Long) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             
             try {
-                // Collect from repository StateFlow
-                saleRepository.sales.collect { sales ->
-                    _allSales.value = sales
-                    
-                    // Filter by status
-                    _salesDueToday.value = sales.filter { sale ->
-                        sale.status == "Active" && 
-                        sale.purchaseType == "EMI" &&
-                        isDueToday(sale.emiDetails?.nextDueDate ?: 0L)
+                // Manually fetch active sales (pending EMI sales)
+                val result = saleRepository.getAllActiveSales()
+                
+                result.fold(
+                    onSuccess = { sales ->
+                        // Filter only EMI sales
+                        val emiSales = sales.filter { it.emi && it.emiDetailsRef != null }
+                        _allSales.value = emiSales
+                        
+                        // Load details for EMI sales (including EmiDetails)
+                        loadSalesDetailsWithDateRange(emiSales, fromDate, toDate)
+                    },
+                    onFailure = { exception ->
+                        _error.value = exception.message ?: "Failed to load EMI schedule"
+                        _isLoading.value = false
                     }
-                    
-                    _completedSales.value = sales.filter { it.status == "Completed" }
-                    
-                    // Load details for all sales
-                    loadSalesDetails(sales)
-                }
+                )
             } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to load sales"
+                _error.value = e.message ?: "Failed to load EMI schedule"
                 _isLoading.value = false
             }
         }
     }
     
     /**
-     * Load customer and vehicle details for sales
+     * Load customer and vehicle details for sales, including EmiDetails from separate collection
+     * Filters by date range: shows EMIs within range OR overdue (before fromDate)
      */
-    private suspend fun loadSalesDetails(sales: List<VehicleSale>) {
+    private suspend fun loadSalesDetailsWithDateRange(sales: List<VehicleSale>, fromDate: Long, toDate: Long) {
         val salesWithDetailsList = sales.map { sale ->
             val customer = sale.customerRef?.let { ref ->
                 val result = vehicleRepository.getCustomerByReference(ref)
@@ -135,31 +141,57 @@ class PaymentsViewModel : ViewModel() {
                 result.getOrNull()
             }
             
-            SaleWithDetails(sale, customer, vehicle)
+            // Fetch EmiDetails from separate collection if emiDetailsRef exists
+            val emiDetails = sale.emiDetailsRef?.let { ref ->
+                saleRepository.getEmiDetailsByRef(ref).getOrNull()
+            }
+            
+            SaleWithDetails(sale, customer, vehicle, emiDetails)
         }
         
         _salesWithDetails.value = salesWithDetailsList
-        _salesDueTodayWithDetails.value = salesWithDetailsList.filter { saleDetail ->
-            saleDetail.sale.status == "Active" &&
-            saleDetail.sale.purchaseType == "EMI" &&
-            isDueToday(saleDetail.sale.emiDetails?.nextDueDate ?: 0L)
-        }
-        _completedSalesWithDetails.value = salesWithDetailsList.filter { 
-            it.sale.status == "Completed" 
-        }
         
+        // Filter EMI-only sales (status = false/pending, emi = true)
         val emiOnly = salesWithDetailsList.filter { detail ->
-            detail.sale.status == "Active" &&
-            detail.sale.purchaseType == "EMI" &&
-            (detail.sale.emiDetails?.nextDueDate ?: 0L) > 0L
-        }.sortedBy { it.sale.emiDetails?.nextDueDate ?: Long.MAX_VALUE }
-        
-        _emiSchedule.value = emiOnly
-        _overdueEmi.value = emiOnly.filter { detail ->
-            isOverdue(detail.sale.emiDetails?.nextDueDate ?: 0L)
+            !detail.sale.status &&  // pending
+            detail.sale.emi &&  // is EMI
+            (detail.emiDetails?.nextDueDate ?: 0L) > 0L
         }
-        _upcomingEmi.value = emiOnly.filterNot { detail ->
-            isOverdue(detail.sale.emiDetails?.nextDueDate ?: 0L)
+        
+        // Apply date range filter: include EMIs within range OR overdue (before fromDate)
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        
+        // Calculate end of toDate (end of day)
+        val toDateEnd = Calendar.getInstance().apply {
+            timeInMillis = toDate
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        
+        val filteredEmi = emiOnly.filter { detail ->
+            val dueDate = detail.emiDetails?.nextDueDate ?: 0L
+            if (dueDate <= 0L) return@filter false
+            
+            // Include if:
+            // 1. Due date is within the selected range (fromDate to toDateEnd), OR
+            // 2. Due date is overdue (before fromDate and before today)
+            (dueDate >= fromDate && dueDate <= toDateEnd) || 
+            (dueDate < fromDate && dueDate < todayStart)
+        }.sortedBy { it.emiDetails?.nextDueDate ?: Long.MAX_VALUE }
+        
+        _emiSchedule.value = filteredEmi
+        _overdueEmi.value = filteredEmi.filter { detail ->
+            isOverdue(detail.emiDetails?.nextDueDate ?: 0L)
+        }
+        _upcomingEmi.value = filteredEmi.filterNot { detail ->
+            isOverdue(detail.emiDetails?.nextDueDate ?: 0L)
         }
         
         _isLoading.value = false
@@ -195,7 +227,7 @@ class PaymentsViewModel : ViewModel() {
     /**
      * Record an EMI payment
      */
-    fun recordEmiPayment(saleId: String, cashAmount: Double, bankAmount: Double) {
+    fun recordEmiPayment(sale: VehicleSale, emiDetails: EmiDetails, cashAmount: Double, bankAmount: Double, note: String = "", date: String = "") {
         if (cashAmount <= 0.0 && bankAmount <= 0.0) {
             _error.value = "Enter payment amount"
             return
@@ -204,7 +236,7 @@ class PaymentsViewModel : ViewModel() {
             _isLoading.value = true
             _error.value = null
             
-            val result = saleRepository.recordEmiPayment(saleId, cashAmount, bankAmount)
+            val result = saleRepository.recordEmiPayment(sale, emiDetails, cashAmount, bankAmount, note = note, date = date)
             
             result.fold(
                 onSuccess = {

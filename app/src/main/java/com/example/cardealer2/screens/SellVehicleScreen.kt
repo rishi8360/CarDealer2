@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -23,7 +21,11 @@ import com.example.cardealer2.ViewModel.SellVehicleViewModel
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Product
 import com.example.cardealer2.utility.ConsistentTopAppBar
-import com.example.cardealer2.utility.FilterableDropdownFieldWithDialog
+import com.example.cardealer2.utility.CustomerSearchableDropdown
+import com.example.cardealer2.utility.DatePickerButton
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +39,9 @@ fun SellVehicleScreen(
     val selectedCustomer by viewModel.selectedCustomer.collectAsState()
     val paymentType by viewModel.paymentType.collectAsState()
     val salePrice by viewModel.salePrice.collectAsState()
+    val downPayment by viewModel.downPayment.collectAsState()
+    val cashDownPayment by viewModel.cashDownPayment.collectAsState()
+    val bankDownPayment by viewModel.bankDownPayment.collectAsState()
     val interestRate by viewModel.interestRate.collectAsState()
     val frequency by viewModel.frequency.collectAsState()
     val durationMonths by viewModel.durationMonths.collectAsState()
@@ -45,6 +50,10 @@ fun SellVehicleScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val success by viewModel.success.collectAsState()
+    val nocHandedOver by viewModel.nocHandedOver.collectAsState()
+    val rcHandedOver by viewModel.rcHandedOver.collectAsState()
+    val insuranceHandedOver by viewModel.insuranceHandedOver.collectAsState()
+    val otherDocsHandedOver by viewModel.otherDocsHandedOver.collectAsState()
     
     var showPaymentTypeDialog by remember { mutableStateOf(false) }
     
@@ -60,11 +69,15 @@ fun SellVehicleScreen(
         }
     }
     
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Sell Vehicle",
-                subtitle = selectedVehicle?.productId ?: "Loading...",
+                title = TranslationManager.translate("Sell Vehicle", isPunjabiEnabled),
+                subtitle = selectedVehicle?.productId ?: TranslationManager.translate("Loading...", isPunjabiEnabled),
                 navController = navController
             )
         }
@@ -88,13 +101,13 @@ fun SellVehicleScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Vehicle not found",
+                            TranslatedText(
+                                englishText = "Vehicle not found",
                                 style = MaterialTheme.typography.titleLarge
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = { navController.popBackStack() }) {
-                                Text("Go Back")
+                                TranslatedText("Go Back")
                             }
                         }
                     }
@@ -106,6 +119,7 @@ fun SellVehicleScreen(
                             .padding(paddingValues)
                             .padding(horizontal = 20.dp)
                             .verticalScroll(rememberScrollState())
+                            .imePadding()
                     ) {
                         Spacer(modifier = Modifier.height(20.dp))
                         
@@ -118,19 +132,18 @@ fun SellVehicleScreen(
                         
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        Text(
-                            text = "Customer",
+                        TranslatedText(
+                            englishText = "Customer",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        FilterableDropdownFieldWithDialog(
-                            label = "Select Customer",
-                            items = customers,
-                            selectedItem = selectedCustomer,
-                            onItemSelected = { viewModel.setSelectedCustomer(it) },
-                            onShowAddDialog = { navController.navigate("add_customer") },
-                            itemToString = { customer -> "${customer.name} (${customer.phone})" },
+                        CustomerSearchableDropdown(
+                            label = TranslationManager.translate("Select Customer", isPunjabiEnabled),
+                            customers = customers,
+                            selectedCustomer = selectedCustomer,
+                            onCustomerSelected = { viewModel.setSelectedCustomer(it) },
+                            onShowAddDialog = { _ -> navController.navigate("add_customer") },
                             modifier = Modifier.fillMaxWidth()
                         )
                         selectedCustomer?.let { customer ->
@@ -159,6 +172,13 @@ fun SellVehicleScreen(
                                 }
                                 "EMI" -> {
                                     EmiForm(
+                                        salePrice = salePrice,
+                                        downPayment = downPayment,
+                                        onDownPaymentChange = { viewModel.setDownPayment(it) },
+                                        cashDownPayment = cashDownPayment,
+                                        onCashDownPaymentChange = { viewModel.setCashDownPayment(it) },
+                                        bankDownPayment = bankDownPayment,
+                                        onBankDownPaymentChange = { viewModel.setBankDownPayment(it) },
                                         interestRate = interestRate,
                                         onInterestRateChange = { viewModel.setInterestRate(it) },
                                         frequency = frequency,
@@ -171,10 +191,91 @@ fun SellVehicleScreen(
                             }
                             
                             Spacer(modifier = Modifier.height(24.dp))
+
+                            // Documents handed over section
+                            TranslatedText(
+                                englishText = "Documents Handed Over",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = nocHandedOver,
+                                    onCheckedChange = { viewModel.setNocHandedOver(it) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TranslatedText(englishText = "NOC")
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = rcHandedOver,
+                                    onCheckedChange = { viewModel.setRcHandedOver(it) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TranslatedText(englishText = "RC")
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = insuranceHandedOver,
+                                    onCheckedChange = { viewModel.setInsuranceHandedOver(it) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TranslatedText(englishText = "Insurance")
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = otherDocsHandedOver,
+                                    onCheckedChange = { viewModel.setOtherDocsHandedOver(it) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TranslatedText(englishText = "Other Documents")
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            // Date Picker
+                            var selectedDate by remember { mutableStateOf("") }
+                            DatePickerButton(
+                                selectedDate = selectedDate,
+                                onDateSelected = { selectedDate = it },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Note Field
+                            var note by remember { mutableStateOf("") }
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it },
+                                label = { TranslatedText("Note (Optional)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 3,
+                                leadingIcon = { Icon(Icons.Outlined.Description, null) }
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
                             
                             // Submit Button
                             Button(
-                                onClick = { viewModel.completeSale() },
+                                onClick = { viewModel.completeSale(note, selectedDate) },
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = when (paymentType) {
                                     "FULL_PAYMENT" -> salePrice.toDoubleOrNull()?.let { it > 0 } ?: false
@@ -189,7 +290,7 @@ fun SellVehicleScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
-                                Text("Complete Sale")
+                                TranslatedText("Complete Sale")
                             }
                         }
                         
@@ -242,24 +343,31 @@ fun VehicleInfoCard(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
+        val context = LocalContext.current
+        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+            .collectAsState(initial = false)
+        
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Text(
-                text = "Vehicle Information",
+            TranslatedText(
+                englishText = "Vehicle Information",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
-            InfoRow("Model", vehicle.productId)
-            InfoRow("Chassis Number", vehicle.chassisNumber)
-            InfoRow("Listed Price", "₹${vehicle.price}")
-            InfoRow("Year", vehicle.year.toString())
-            InfoRow("Color", vehicle.colour)
+            InfoRow(TranslationManager.translate("Model", isPunjabiEnabled), vehicle.productId, isPunjabiEnabled)
+            InfoRow(TranslationManager.translate("Chassis Number", isPunjabiEnabled), vehicle.chassisNumber, isPunjabiEnabled)
+            InfoRow(TranslationManager.translate("Purchase Price", isPunjabiEnabled), "₹${vehicle.price}", isPunjabiEnabled)
+            if (vehicle.sellingPrice > 0) {
+                InfoRow(TranslationManager.translate("Selling Price", isPunjabiEnabled), "₹${vehicle.sellingPrice}", isPunjabiEnabled)
+            }
+            InfoRow(TranslationManager.translate("Year", isPunjabiEnabled), vehicle.year.toString(), isPunjabiEnabled)
+            InfoRow(TranslationManager.translate("Color", isPunjabiEnabled), vehicle.colour, isPunjabiEnabled)
             
             Spacer(modifier = Modifier.height(20.dp))
-            Text(
-                text = "Sale Price",
+            TranslatedText(
+                englishText = "Sale Price",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
@@ -268,14 +376,18 @@ fun VehicleInfoCard(
                 value = salePrice,
                 onValueChange = onSalePriceChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Sale Price (₹)") },
+                label = { TranslatedText("Sale Price (₹)") },
                 leadingIcon = { Icon(Icons.Outlined.AttachMoney, null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Prefilled with the listed price. Update if selling at a different amount.",
+            TranslatedText(
+                englishText = if (vehicle.sellingPrice > 0) {
+                    "Prefilled with the selling price. Update if selling at a different amount."
+                } else {
+                    "Prefilled with the purchase price. Update if selling at a different amount."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -284,7 +396,7 @@ fun VehicleInfoCard(
 }
 
 @Composable
-fun InfoRow(label: String, value: String) {
+fun InfoRow(label: String, value: String, isPunjabiEnabled: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -309,6 +421,10 @@ fun PaymentTypeSelectionCard(
     paymentType: String?,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -326,14 +442,14 @@ fun PaymentTypeSelectionCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Payment Type",
+                TranslatedText(
+                    englishText = "Payment Type",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = when (paymentType) {
+                TranslatedText(
+                    englishText = when (paymentType) {
                         "FULL_PAYMENT" -> "Pay in Full"
                         "EMI" -> "EMI"
                         else -> "Select Payment Type"
@@ -345,7 +461,7 @@ fun PaymentTypeSelectionCard(
             }
             Icon(
                 imageVector = Icons.Outlined.ArrowForwardIos,
-                contentDescription = "Select Payment Type"
+                contentDescription = TranslationManager.translate("Select Payment Type", isPunjabiEnabled)
             )
         }
     }
@@ -356,6 +472,10 @@ fun FullPaymentSummary(
     salePrice: String,
     originalPrice: Int
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     val amount = salePrice.toDoubleOrNull()?.takeIf { it > 0 }
     val priceDifference = amount?.minus(originalPrice) ?: 0.0
     
@@ -369,36 +489,43 @@ fun FullPaymentSummary(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Text(
-                text = "Full Payment",
+            TranslatedText(
+                englishText = "Full Payment",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(12.dp))
             if (amount != null) {
+                val upfrontText = if (isPunjabiEnabled) {
+                    "${TranslationManager.translate("Customer pays", isPunjabiEnabled)} ₹${String.format("%.2f", amount)} ${TranslationManager.translate("upfront", isPunjabiEnabled)}."
+                } else {
+                    "Customer pays ₹${String.format("%.2f", amount)} upfront."
+                }
                 Text(
-                    text = "Customer pays ₹${String.format("%.2f", amount)} upfront.",
+                    text = upfrontText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 if (priceDifference != 0.0) {
-                    val diffLabel = if (priceDifference > 0) "above" else "below"
+                    val diffLabel = if (priceDifference > 0) TranslationManager.translate("above", isPunjabiEnabled) else TranslationManager.translate("below", isPunjabiEnabled)
+                    val listedPriceText = TranslationManager.translate("the listed price", isPunjabiEnabled)
                     Text(
-                        text = "This is ₹${String.format("%.2f", abs(priceDifference))} $diffLabel the listed price (₹$originalPrice).",
+                        text = "${TranslationManager.translate("This is ₹", isPunjabiEnabled)}${String.format("%.2f", abs(priceDifference))} $diffLabel $listedPriceText (₹$originalPrice).",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
+                    val matchesText = "${TranslationManager.translate("Matches the listed price of ₹", isPunjabiEnabled)}$originalPrice."
                     Text(
-                        text = "Matches the listed price of ₹$originalPrice.",
+                        text = matchesText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                Text(
-                    text = "Enter a valid sale amount above to proceed with full payment.",
+                TranslatedText(
+                    englishText = "Enter a valid sale amount above to proceed with full payment.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -410,6 +537,13 @@ fun FullPaymentSummary(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmiForm(
+    salePrice: String,
+    downPayment: String,
+    onDownPaymentChange: (String) -> Unit,
+    cashDownPayment: String,
+    onCashDownPaymentChange: (String) -> Unit,
+    bankDownPayment: String,
+    onBankDownPaymentChange: (String) -> Unit,
     interestRate: String,
     onInterestRateChange: (String) -> Unit,
     frequency: String,
@@ -418,6 +552,48 @@ fun EmiForm(
     onDurationMonthsChange: (String) -> Unit,
     calculatedEmi: Double
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    val currentFrequencyDisplay = remember(frequency, isPunjabiEnabled) {
+        when(frequency) {
+            "MONTHLY" -> TranslationManager.translate("MONTHLY", isPunjabiEnabled)
+            "QUARTERLY" -> TranslationManager.translate("QUARTERLY", isPunjabiEnabled)
+            "SEMI_ANNUALLY" -> TranslationManager.translate("SEMI_ANNUALLY", isPunjabiEnabled)
+            "YEARLY" -> TranslationManager.translate("YEARLY", isPunjabiEnabled)
+            else -> frequency
+        }
+    }
+    
+    // Calculate breakdown for display
+    val salePriceAmount = salePrice.toDoubleOrNull() ?: 0.0
+    val downPaymentAmount = downPayment.toDoubleOrNull() ?: 0.0
+    val principal = salePriceAmount - downPaymentAmount
+    val months = durationMonths.toIntOrNull() ?: 0
+    val rate = interestRate.toDoubleOrNull() ?: 0.0
+    
+    // Calculate periods based on frequency (round down)
+    val periods = remember(frequency, months) {
+        when (frequency) {
+            "MONTHLY" -> months
+            "QUARTERLY" -> months / 3
+            "SEMI_ANNUALLY" -> months / 6
+            "YEARLY" -> months / 12
+            else -> months
+        }
+    }
+    
+    val totalInterest = remember(principal, rate, periods) {
+        if (principal > 0 && rate >= 0 && periods > 0) {
+            principal * (rate / 100.0) * periods
+        } else {
+            0.0
+        }
+    }
+    
+    val totalAmount = principal + totalInterest
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -428,17 +604,96 @@ fun EmiForm(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            Text(
-                text = "EMI Details",
+            TranslatedText(
+                englishText = "EMI Details",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(16.dp))
             
+            // Down Payment Field
+            OutlinedTextField(
+                value = downPayment,
+                onValueChange = onDownPaymentChange,
+                label = { TranslatedText("Down Payment (₹)") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                leadingIcon = { Icon(Icons.Outlined.Payment, null) },
+                singleLine = true
+            )
+            
+            // Cash and Bank Down Payment Fields (only show if down payment > 0)
+            if (downPaymentAmount > 0) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TranslatedText(
+                    englishText = "Down Payment Split",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = cashDownPayment,
+                        onValueChange = onCashDownPaymentChange,
+                        label = { TranslatedText("Cash (₹)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        leadingIcon = { Icon(Icons.Outlined.Money, null) },
+                        singleLine = true
+                    )
+                    
+                    OutlinedTextField(
+                        value = bankDownPayment,
+                        onValueChange = onBankDownPaymentChange,
+                        label = { TranslatedText("Bank (₹)") },
+                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        leadingIcon = { Icon(Icons.Outlined.AccountBalance, null) },
+                        singleLine = true
+                    )
+                }
+                
+                // Validation message
+                val cashAmount = cashDownPayment.toDoubleOrNull() ?: 0.0
+                val bankAmount = bankDownPayment.toDoubleOrNull() ?: 0.0
+                val totalSplit = cashAmount + bankAmount
+                val difference = kotlin.math.abs(totalSplit - downPaymentAmount)
+                
+                if (downPaymentAmount > 0 && difference > 0.01) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isPunjabiEnabled) {
+                            "ਕੁੱਲ ₹${String.format("%.2f", totalSplit)} ਹੈ, ਪਰ ਡਾਊਨ ਪੇਮੈਂਟ ₹${String.format("%.2f", downPaymentAmount)} ਹੈ।"
+                        } else {
+                            "Total is ₹${String.format("%.2f", totalSplit)}, but Down Payment is ₹${String.format("%.2f", downPaymentAmount)}."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (downPaymentAmount > 0 && totalSplit > 0 && difference <= 0.01) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isPunjabiEnabled) {
+                            "✓ ਰਕਮ ਮੈਚ ਕਰਦੀ ਹੈ"
+                        } else {
+                            "✓ Amounts match"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
             OutlinedTextField(
                 value = interestRate,
                 onValueChange = onInterestRateChange,
-                label = { Text("Interest Rate (%)") },
+                label = { TranslatedText("Interest Rate (%)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 leadingIcon = { Icon(Icons.Outlined.Percent, null) },
@@ -453,10 +708,10 @@ fun EmiForm(
                 onExpandedChange = { expanded = !expanded }
             ) {
                 OutlinedTextField(
-                    value = frequency,
+                    value = currentFrequencyDisplay,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Payment Frequency") },
+                    label = { TranslatedText("Payment Frequency") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(),
@@ -466,9 +721,16 @@ fun EmiForm(
                     expanded = expanded,
                     onDismissRequest = { expanded = false }
                 ) {
-                    listOf("MONTHLY", "QUARTERLY", "YEARLY").forEach { freq ->
+                    listOf("MONTHLY", "QUARTERLY", "SEMI_ANNUALLY", "YEARLY").forEach { freq ->
+                        val displayText = when(freq) {
+                            "MONTHLY" -> TranslationManager.translate("MONTHLY", isPunjabiEnabled)
+                            "QUARTERLY" -> TranslationManager.translate("QUARTERLY", isPunjabiEnabled)
+                            "SEMI_ANNUALLY" -> TranslationManager.translate("SEMI_ANNUALLY", isPunjabiEnabled)
+                            "YEARLY" -> TranslationManager.translate("YEARLY", isPunjabiEnabled)
+                            else -> freq
+                        }
                         DropdownMenuItem(
-                            text = { Text(freq) },
+                            text = { Text(displayText) },
                             onClick = {
                                 onFrequencyChange(freq)
                                 expanded = false
@@ -483,7 +745,7 @@ fun EmiForm(
             OutlinedTextField(
                 value = durationMonths,
                 onValueChange = onDurationMonthsChange,
-                label = { Text("Duration (Months)") },
+                label = { TranslatedText("Duration (Months)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 leadingIcon = { Icon(Icons.Outlined.CalendarToday, null) },
@@ -492,7 +754,7 @@ fun EmiForm(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            if (calculatedEmi > 0) {
+            if (calculatedEmi > 0 && principal > 0) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -502,8 +764,89 @@ fun EmiForm(
                     Column(
                         modifier = Modifier.padding(16.dp)
                     ) {
+                        TranslatedText(
+                            englishText = "EMI Calculation Summary",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // Principal
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            TranslatedText(
+                                englishText = "Principal (Sale Price - Down Payment)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "₹${String.format("%.2f", principal)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        // Total Interest
+                        if (totalInterest > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                TranslatedText(
+                                    englishText = "Total Interest (${rate}% × $periods periods)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "₹${String.format("%.2f", totalInterest)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        
+                        // Total Amount
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            TranslatedText(
+                                englishText = "Total Amount",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "₹${String.format("%.2f", totalAmount)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // EMI per payment (frequency-based)
+                        val emiLabel = remember(frequency, isPunjabiEnabled) {
+                            when(frequency) {
+                                "MONTHLY" -> TranslationManager.translate("EMI per Month", isPunjabiEnabled)
+                                "QUARTERLY" -> TranslationManager.translate("EMI per Quarter", isPunjabiEnabled)
+                                "SEMI_ANNUALLY" -> TranslationManager.translate("EMI per Semi-Annual Period", isPunjabiEnabled)
+                                "YEARLY" -> TranslationManager.translate("EMI per Year", isPunjabiEnabled)
+                                else -> TranslationManager.translate("EMI per Payment", isPunjabiEnabled)
+                            }
+                        }
                         Text(
-                            text = "Calculated EMI",
+                            text = emiLabel,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -514,9 +857,19 @@ fun EmiForm(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val paymentInfoText = remember(frequency, periods, months, isPunjabiEnabled) {
+                            val paymentsText = TranslationManager.translate("payments", isPunjabiEnabled)
+                            val monthsText = TranslationManager.translate("months", isPunjabiEnabled)
+                            when(frequency) {
+                                "MONTHLY", "QUARTERLY", "SEMI_ANNUALLY", "YEARLY" -> {
+                                    "${TranslationManager.translate("For", isPunjabiEnabled)} $periods $paymentsText ($months $monthsText)"
+                                }
+                                else -> "${TranslationManager.translate("For", isPunjabiEnabled)} $periods $paymentsText"
+                            }
+                        }
                         Text(
-                            text = "Total Amount: ₹${String.format("%.2f", calculatedEmi * (durationMonths.toIntOrNull() ?: 0))}",
+                            text = paymentInfoText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -532,22 +885,26 @@ fun PaymentTypeSelectionDialog(
     onPaymentTypeSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Payment Type") },
+        title = { TranslatedText("Select Payment Type") },
         text = {
             Column {
                 PaymentTypeOption(
-                    title = "Pay in Full",
-                    description = "Customer pays the entire amount upfront",
+                    title = TranslationManager.translate("Pay in Full", isPunjabiEnabled),
+                    description = TranslationManager.translate("Customer pays the entire amount upfront", isPunjabiEnabled),
                     onClick = {
                         onPaymentTypeSelected("FULL_PAYMENT")
                     }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 PaymentTypeOption(
-                    title = "EMI",
-                    description = "Customer pays in installments with interest",
+                    title = TranslationManager.translate("EMI", isPunjabiEnabled),
+                    description = TranslationManager.translate("Customer pays in installments with interest", isPunjabiEnabled),
                     onClick = {
                         onPaymentTypeSelected("EMI")
                     }
@@ -556,7 +913,7 @@ fun PaymentTypeSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                TranslatedText("Cancel")
             }
         }
     )

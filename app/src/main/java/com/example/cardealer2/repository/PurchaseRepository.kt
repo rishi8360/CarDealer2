@@ -8,6 +8,7 @@ import com.example.cardealer2.data.PersonTransaction
 import com.example.cardealer2.data.TransactionType
 import com.example.cardealer2.data.PersonType
 import com.example.cardealer2.data.PaymentMethod
+import com.example.cardealer2.data.Product
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -22,6 +23,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object PurchaseRepository {
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance().apply {
@@ -38,6 +42,7 @@ object PurchaseRepository {
     private val purchaseCollection = db.collection("Purchase")
     private val capitalCollection = db.collection("Capital")
     private val maxOrderNoCollection = db.collection("MaxOrderNo")
+    private val maxTransactionNoCollection = db.collection("MaxTransactionNo")
     
     // 🔹 StateFlow exposed to ViewModels - automatically updates when Firestore changes
     private val _purchases = MutableStateFlow<List<Purchase>>(emptyList())
@@ -46,6 +51,10 @@ object PurchaseRepository {
     // 🔹 MaxOrderNo StateFlow - listens to the first document in MaxOrderNo collection
     private val _maxOrderNo = MutableStateFlow<Int>(0)
     val maxOrderNo: StateFlow<Int> = _maxOrderNo.asStateFlow()
+
+    // 🔹 MaxTransactionNo StateFlow - listens to the first document in MaxTransactionNo collection
+    private val _maxTransactionNo = MutableStateFlow<Int>(0)
+    val maxTransactionNo: StateFlow<Int> = _maxTransactionNo.asStateFlow()
 
     // 🔹 Loading and error states
     private val _isLoading = MutableStateFlow(false)
@@ -58,6 +67,8 @@ object PurchaseRepository {
     private var purchaseListenerRegistration: ListenerRegistration? = null
     private var maxOrderNoListenerRegistration: ListenerRegistration? = null
     private var maxOrderNoDocRef: DocumentReference? = null
+    private var maxTransactionNoListenerRegistration: ListenerRegistration? = null
+    private var maxTransactionNoDocRef: DocumentReference? = null
 
     // 🔹 Coroutine scope for repository operations
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -67,6 +78,7 @@ object PurchaseRepository {
         startListening()
         repositoryScope.launch {
             initializeMaxOrderNoListener()
+            initializeMaxTransactionNoListener()
         }
     }
 
@@ -166,13 +178,65 @@ object PurchaseRepository {
     }
 
     /**
+     * Initialize and listen to MaxTransactionNo document
+     */
+    private suspend fun initializeMaxTransactionNoListener() {
+        maxTransactionNoListenerRegistration?.remove()
+
+        try {
+            // Check if any document exists
+            val existingDocs = maxTransactionNoCollection.limit(1).get().await()
+            
+            if (existingDocs.isEmpty) {
+                // Create initial document
+                val docRef = maxTransactionNoCollection.document()
+                docRef.set(mapOf("maxTransactionNo" to 0)).await()
+                maxTransactionNoDocRef = docRef
+            } else {
+                maxTransactionNoDocRef = existingDocs.documents.first().reference
+            }
+
+            // Start listening to the document
+            maxTransactionNoDocRef?.let { docRef ->
+                maxTransactionNoListenerRegistration = docRef.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        val errorMsg = error.message ?: "Error loading MaxTransactionNo"
+                        Log.e(TAG, "❌ Error in MaxTransactionNo listener: $errorMsg", error)
+                        _error.value = errorMsg
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot != null && snapshot.exists()) {
+                        try {
+                            val maxTransactionNo = getIntFromFirestore(snapshot.get("maxTransactionNo"))
+                            _maxTransactionNo.value = maxTransactionNo
+                            _error.value = null
+                            Log.d(TAG, "✅ MaxTransactionNo listener updated: $maxTransactionNo")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error parsing MaxTransactionNo: ${e.message}", e)
+                            _error.value = "Error parsing MaxTransactionNo: ${e.message}"
+                        }
+                    } else {
+                        Log.w(TAG, "⚠️ MaxTransactionNo snapshot is null or doesn't exist")
+                    }
+                }
+                Log.d(TAG, "✅ MaxTransactionNo listener started successfully")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error initializing MaxTransactionNo listener: ${e.message}", e)
+        }
+    }
+
+    /**
      * Stop listening (useful for cleanup)
      */
     fun stopListening() {
         purchaseListenerRegistration?.remove()
         maxOrderNoListenerRegistration?.remove()
+        maxTransactionNoListenerRegistration?.remove()
         purchaseListenerRegistration = null
         maxOrderNoListenerRegistration = null
+        maxTransactionNoListenerRegistration = null
     }
 
     /**
@@ -285,7 +349,9 @@ object PurchaseRepository {
         gstAmount: Double,
         paymentMethods: Map<String, String>,  // Map with keys: "bank", "cash", "credit"
         vehicle: Map<String, String>,
-        middleMan: String
+        middleMan: String,
+        ownerRef: DocumentReference? = null,
+        brokerRef: DocumentReference? = null
     ): Result<String> {
         return try {
             // Get next order number
@@ -309,6 +375,16 @@ object PurchaseRepository {
                 "middleMan" to middleMan,
                 "createdAt" to System.currentTimeMillis()
             )
+            
+            // Add ownerRef if provided
+            ownerRef?.let {
+                purchaseData["ownerRef"] = it
+            }
+            
+            // Add brokerRef if provided
+            brokerRef?.let {
+                purchaseData["brokerRef"] = it
+            }
             
             purchaseDocRef.set(purchaseData).await()
             
@@ -601,7 +677,9 @@ object PurchaseRepository {
         gstAmount: Double,
         paymentMethods: Map<String, String>,  // Map with keys: "bank", "cash", "credit"
         vehicle: Map<String, String>,
-        middleMan: String
+        middleMan: String,
+        ownerRef: DocumentReference? = null,
+        brokerRef: DocumentReference? = null
     ): Result<String> {
         return try {
             // Add purchase
@@ -610,7 +688,9 @@ object PurchaseRepository {
                 gstAmount = gstAmount,
                 paymentMethods = paymentMethods,
                 vehicle = vehicle,
-                middleMan = middleMan
+                middleMan = middleMan,
+                ownerRef = ownerRef,
+                brokerRef = brokerRef
             )
             
             if (purchaseResult.isFailure) {
@@ -699,6 +779,7 @@ object PurchaseRepository {
      * @param nocUrls Already uploaded NOC PDF URLs
      * @param rcUrls Already uploaded RC PDF URLs
      * @param insuranceUrls Already uploaded Insurance PDF URLs
+     * @param vehicleOtherDocUrls Already uploaded Other Vehicle Document PDF URLs
      * @param brandDocRef Brand document reference
      * @param brandNameRef BrandNames document reference (optional)
      * @param brokerOrMiddleManRef Broker/Middle Man document reference (optional)
@@ -715,19 +796,26 @@ object PurchaseRepository {
         vehicle: Map<String, String>,
         middleMan: String,
         brandId: String,
-        product: com.example.cardealer2.data.Product,
+        product: Product,
         imageUrls: List<String>,
         nocUrls: List<String>,
         rcUrls: List<String>,
         insuranceUrls: List<String>,
-        brandDocRef: com.google.firebase.firestore.DocumentReference,
-        brandNameRef: com.google.firebase.firestore.DocumentReference?,
-        brokerOrMiddleManRef: com.google.firebase.firestore.DocumentReference?,
-        ownerRef: com.google.firebase.firestore.DocumentReference?,
+        vehicleOtherDocUrls: List<String>,
+        brandDocRef: DocumentReference,
+        brandNameRef: DocumentReference?,
+        brokerOrMiddleManRef: DocumentReference?,
+        ownerRef: DocumentReference?,
         purchaseType: String? = null,
         brokerFee: Double = 0.0,
-        brokerFeePaymentMethods: Map<String, String>? = null
+        brokerFeePaymentMethods: Map<String, String>? = null,
+        note: String = "",
+        date: String = ""
     ): Result<String> {
+        val purchaseDate = date.ifBlank {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            sdf.format(Date())
+        }
         return try {
             // Get maxOrderNo document reference
             val maxOrderNoDocRefLocal = if (maxOrderNoDocRef != null) {
@@ -743,6 +831,16 @@ object PurchaseRepository {
                     maxOrderNoDocRef = docs.documents.first().reference
                     docs.documents.first().reference
                 }
+            }
+            
+            // Get maxTransactionNo document reference
+            val maxTransactionNoDocs = maxTransactionNoCollection.limit(1).get().await()
+            val maxTransactionNoDocRefLocal = if (maxTransactionNoDocs.isEmpty) {
+                val newDocRef = maxTransactionNoCollection.document()
+                newDocRef.set(mapOf("maxTransactionNo" to 0)).await()
+                newDocRef
+            } else {
+                maxTransactionNoDocs.documents.first().reference
             }
             
             // Get capital document references
@@ -774,11 +872,19 @@ object PurchaseRepository {
             val purchaseId = db.runTransaction { transaction ->
                 // ========== PHASE 1: READ ALL DOCUMENTS FIRST ==========
                 // Firestore requires all reads to complete before any writes
+                // IMPORTANT: Any DocumentReference that will be written must have its document read first
                 
                 // 1. Read maxOrderNo document
                 val maxOrderNoSnapshot = transaction.get(maxOrderNoDocRefLocal)
                 val currentMax = getIntFromFirestore(maxOrderNoSnapshot.get("maxOrderNo"))
                 val orderNumber = currentMax + 1
+                
+                // 1b. Read maxTransactionNo document
+                val maxTransactionNoSnapshot = transaction.get(maxTransactionNoDocRefLocal)
+                var currentTransactionNo = getIntFromFirestore(maxTransactionNoSnapshot.get("maxTransactionNo"))
+                
+                // Track the purchase transaction number (will be set when owner transaction is created, or middle man, or broker fee)
+                var purchaseTransactionNumber: Int? = null
                 
                 // 2. Read all capital documents that will be updated
                 val capitalSnapshots = mutableMapOf<DocumentReference, com.google.firebase.firestore.DocumentSnapshot>()
@@ -789,6 +895,26 @@ object PurchaseRepository {
                 // 3. Read brand document
                 val brandSnapshot = transaction.get(brandDocRef)
                 
+                // 4. Read ownerRef document if provided (required for writing DocumentReference in transaction)
+                ownerRef?.let {
+                    try {
+                        transaction.get(it)
+                        Log.d(TAG, "✅ Read ownerRef document in transaction: ${it.path}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Could not read ownerRef document: ${it.path}, error: ${e.message}")
+                    }
+                }
+                
+                // 5. Read brokerOrMiddleManRef document if provided (required for writing DocumentReference in transaction)
+                brokerOrMiddleManRef?.let {
+                    try {
+                        transaction.get(it)
+                        Log.d(TAG, "✅ Read brokerOrMiddleManRef document in transaction: ${it.path}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "⚠️ Could not read brokerOrMiddleManRef document: ${it.path}, error: ${e.message}")
+                    }
+                }
+                
                 // ========== PHASE 2: PERFORM ALL WRITES ==========
                 // Now that all reads are complete, we can perform writes
                 
@@ -798,7 +924,9 @@ object PurchaseRepository {
                 // 2. Create purchase document (new document, no read needed)
                 val purchaseDocRef = purchaseCollection.document()
                 val purchaseIdValue = purchaseDocRef.id
-                val purchaseData = hashMapOf<String, Any>(
+                
+                // Build purchase data map with all fields, including references
+                val purchaseData = mutableMapOf<String, Any>(
                     "purchaseId" to purchaseIdValue,
                     "grandTotal" to grandTotal,
                     "gstAmount" to gstAmount,
@@ -808,7 +936,21 @@ object PurchaseRepository {
                     "middleMan" to middleMan,
                     "createdAt" to System.currentTimeMillis()
                 )
-                transaction.set(purchaseDocRef, purchaseData)
+                
+                // Add ownerRef if provided
+                ownerRef?.let {
+                    purchaseData["ownerRef"] = it
+                    Log.d(TAG, "✅ Adding ownerRef to purchase: ${it.path}")
+                } ?: Log.d(TAG, "⚠️ ownerRef is null, not adding to purchase")
+                
+                // Add brokerRef if provided (using brokerOrMiddleManRef)
+                brokerOrMiddleManRef?.let {
+                    purchaseData["brokerRef"] = it
+                    Log.d(TAG, "✅ Adding brokerRef to purchase: ${it.path}")
+                } ?: Log.d(TAG, "⚠️ brokerOrMiddleManRef is null, not adding to purchase")
+                
+                // Note: transactionNumber will be added after transaction creation logic
+                // We'll update purchaseData before transaction.set()
                 
                 // 3. Update capital documents (using snapshots read in phase 1)
                 paymentMethods.forEach { (method, amountStr) ->
@@ -912,11 +1054,13 @@ object PurchaseRepository {
                     "lastService" to product.lastService,
                     "previousOwners" to product.previousOwners,
                     "price" to product.price,
+                    "sellingPrice" to product.sellingPrice,
                     "type" to product.type,
                     "year" to product.year,
                     "noc" to nocUrls,
                     "rc" to rcUrls,
                     "insurance" to insuranceUrls,
+                    "vehicleOtherDoc" to vehicleOtherDocUrls,
                     "brokerOrMiddleMan" to product.brokerOrMiddleMan,
                     "owner" to product.owner
                 )
@@ -954,6 +1098,8 @@ object PurchaseRepository {
                 
                 // Create BROKER_FEE transaction (if broker involved and broker fee exists)
                 if (determinedPurchaseType == "Broker" && brokerFee > 0 && brokerOrMiddleManRef != null) {
+                    currentTransactionNo++
+                    purchaseTransactionNumber = currentTransactionNo  // Set purchase transaction number
                     val brokerFeePaymentMethod = brokerFeePaymentMethods?.let { determinePaymentMethod(it) } ?: paymentMethod
                     val (brokerFeeCash, brokerFeeBank, brokerFeeCredit) = brokerFeePaymentMethods?.let { extractPaymentAmounts(it) } 
                         ?: Triple(0.0, 0.0, 0.0)
@@ -971,17 +1117,21 @@ object PurchaseRepository {
                         "cashAmount" to brokerFeeCash,
                         "bankAmount" to brokerFeeBank,
                         "creditAmount" to brokerFeeCredit,
-                        "date" to nowTimestamp,
+                        "date" to purchaseDate,
                         "orderNumber" to orderNumber,
+                        "transactionNumber" to currentTransactionNo,
                         "description" to "Broker fee - Order #$orderNumber",
                         "status" to "COMPLETED",
-                        "createdAt" to nowTimestamp
+                        "createdAt" to nowTimestamp,
+                        "note" to note
                     )
                     transaction.set(brokerFeeTransactionRef, brokerFeeTransactionData)
                 }
                 
                 // Create PURCHASE transaction for Middle Man (if middle man involved)
                 if (determinedPurchaseType == "Middle Man" && brokerOrMiddleManRef != null) {
+                    currentTransactionNo++
+                    purchaseTransactionNumber = currentTransactionNo  // Set purchase transaction number if not already set
                     val middleManTransactionRef = transactionCollection.document()
                     val middleManTransactionData = hashMapOf<String, Any>(
                         "transactionId" to middleManTransactionRef.id,
@@ -995,17 +1145,21 @@ object PurchaseRepository {
                         "cashAmount" to cashAmount,
                         "bankAmount" to bankAmount,
                         "creditAmount" to creditAmount,
-                        "date" to nowTimestamp,
+                        "date" to purchaseDate,
                         "orderNumber" to orderNumber,
+                        "transactionNumber" to currentTransactionNo,
                         "description" to "Vehicle purchase - Order #$orderNumber",
                         "status" to "COMPLETED",
-                        "createdAt" to nowTimestamp
+                        "createdAt" to nowTimestamp,
+                        "note" to note
                     )
                     transaction.set(middleManTransactionRef, middleManTransactionData)
                 }
                 
                 // Create PURCHASE transaction for Owner (if owner specified)
                 ownerRef?.let { ref ->
+                    currentTransactionNo++
+                    purchaseTransactionNumber = currentTransactionNo  // Owner transaction takes priority
                     val ownerTransactionRef = transactionCollection.document()
                     val ownerTransactionData = hashMapOf<String, Any>(
                         "transactionId" to ownerTransactionRef.id,
@@ -1019,14 +1173,30 @@ object PurchaseRepository {
                         "cashAmount" to cashAmount,
                         "bankAmount" to bankAmount,
                         "creditAmount" to creditAmount,
-                        "date" to nowTimestamp,
+                        "date" to purchaseDate,
                         "orderNumber" to orderNumber,
+                        "transactionNumber" to currentTransactionNo,
                         "description" to "Vehicle purchase - Order #$orderNumber",
                         "status" to "COMPLETED",
-                        "createdAt" to nowTimestamp
+                        "createdAt" to nowTimestamp,
+                        "note" to note
                     )
                     transaction.set(ownerTransactionRef, ownerTransactionData)
                 }
+                
+                // Add transactionNumber to purchase data (use owner transaction if exists, otherwise middle man, otherwise broker fee)
+                purchaseTransactionNumber?.let {
+                    purchaseData["transactionNumber"] = it
+                } ?: run {
+                    // If no transaction was created (shouldn't happen, but handle gracefully)
+                    purchaseData["transactionNumber"] = currentTransactionNo
+                }
+                
+                Log.d(TAG, "📝 Purchase data keys before transaction.set: ${purchaseData.keys}")
+                transaction.set(purchaseDocRef, purchaseData)
+                
+                // Update maxTransactionNo with the final value
+                transaction.update(maxTransactionNoDocRefLocal, "maxTransactionNo", currentTransactionNo)
                 
                 // Return purchase ID
                 purchaseIdValue

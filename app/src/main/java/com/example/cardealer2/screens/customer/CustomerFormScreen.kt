@@ -20,6 +20,9 @@ import com.example.cardealer2.utility.AmountInputWithStatus
 import com.example.cardealer2.utility.FilterableDropdownField
 import com.example.cardealer2.utility.ImagePickerField
 import com.example.cardealer2.utility.smartPopBack
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 sealed interface CustomerFormMode {
     data object Add : CustomerFormMode
@@ -75,10 +78,17 @@ fun CustomerFormScreen(
         }
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = if (mode is CustomerFormMode.Add) "Add Customer" else "Edit Customer Details",
+                title = if (mode is CustomerFormMode.Add) 
+                    TranslationManager.translate("Add Customer", isPunjabiEnabled) 
+                else 
+                    TranslationManager.translate("Edit Customer Details", isPunjabiEnabled),
                 navController = navController,
                 actions = {
                     if (mode is CustomerFormMode.Edit) {
@@ -106,7 +116,7 @@ fun CustomerFormScreen(
                 OutlinedTextField(
                     value = customerName,
                     onValueChange = { customerName = it },
-                    label = { Text("Customer Name *") },
+                    label = { TranslatedText("Customer Name *") },
                     modifier = Modifier.fillMaxWidth(),
                     isError = uiState.nameError != null
                 )
@@ -117,7 +127,7 @@ fun CustomerFormScreen(
                 OutlinedTextField(
                     value = phoneNumber,
                     onValueChange = { phoneNumber = it },
-                    label = { Text("Phone Number *") },
+                    label = { TranslatedText("Phone Number *") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Phone),
                     isError = uiState.phoneError != null
@@ -129,7 +139,7 @@ fun CustomerFormScreen(
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Address *") },
+                    label = { TranslatedText("Address *") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 5,
@@ -140,7 +150,7 @@ fun CustomerFormScreen(
                 }
 
                 ImagePickerField(
-                    label = "Person Photo",
+                    label = TranslationManager.translate("Person Photo", isPunjabiEnabled),
                     images = photoUris,
                     onImagesChanged = { photoUris = it },
                     errorMessage = uiState.photoError,
@@ -152,13 +162,50 @@ fun CustomerFormScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                Text(text = "Identity Proof", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                TranslatedText(
+                    englishText = "Identity Proof",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
 
+                val idProofTypes = remember(isPunjabiEnabled) {
+                    listOf(
+                        TranslationManager.translate("Aadhaar Card", isPunjabiEnabled),
+                        TranslationManager.translate("Passport", isPunjabiEnabled),
+                        TranslationManager.translate("PAN Card", isPunjabiEnabled),
+                        TranslationManager.translate("Driving License", isPunjabiEnabled),
+                        TranslationManager.translate("Voter ID", isPunjabiEnabled)
+                    )
+                }
+                
+                val currentIdProofTypeDisplay = remember(idProofType, isPunjabiEnabled) {
+                    if (isPunjabiEnabled && idProofType.isNotEmpty()) {
+                        when(idProofType) {
+                            "Aadhaar Card" -> TranslationManager.translate("Aadhaar Card", true)
+                            "Passport" -> TranslationManager.translate("Passport", true)
+                            "PAN Card" -> TranslationManager.translate("PAN Card", true)
+                            "Driving License" -> TranslationManager.translate("Driving License", true)
+                            "Voter ID" -> TranslationManager.translate("Voter ID", true)
+                            else -> idProofType
+                        }
+                    } else idProofType
+                }
+                
                 FilterableDropdownField(
-                    label = "ID Proof Type",
-                    items = listOf("Aadhaar Card", "Passport", "PAN Card", "Driving License", "Voter ID"),
-                    selectedItem = idProofType,
-                    onItemSelected = { idProofType = it },
+                    label = TranslationManager.translate("ID Proof Type", isPunjabiEnabled),
+                    items = idProofTypes,
+                    selectedItem = currentIdProofTypeDisplay,
+                    onItemSelected = { translatedType ->
+                        val englishType = when(translatedType) {
+                            TranslationManager.translate("Aadhaar Card", true) -> "Aadhaar Card"
+                            TranslationManager.translate("Passport", true) -> "Passport"
+                            TranslationManager.translate("PAN Card", true) -> "PAN Card"
+                            TranslationManager.translate("Driving License", true) -> "Driving License"
+                            TranslationManager.translate("Voter ID", true) -> "Voter ID"
+                            else -> translatedType
+                        }
+                        idProofType = englishType
+                    },
                     onAddNewItem = { newType -> idProofType = newType },
                     itemToString = { it },
                     onExpandedChange = { }
@@ -170,9 +217,9 @@ fun CustomerFormScreen(
                 OutlinedTextField(
                     value = idProofNumber,
                     onValueChange = { idProofNumber = it },
-                    label = { Text("ID Proof Number *") },
+                    label = { TranslatedText("ID Proof Number *") },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Enter ID number") },
+                    placeholder = { TranslatedText("Enter ID number") },
                     isError = uiState.idProofNumberError != null
                 )
                 if (uiState.idProofNumberError != null) {
@@ -180,7 +227,7 @@ fun CustomerFormScreen(
                 }
 
                 PdfPickerField(
-                    label = "ID Proof PDFs",
+                    label = TranslationManager.translate("ID Proof PDFs", isPunjabiEnabled),
                     pdfUrls = idProofPdfs,
                     onPdfChange = { idProofPdfs = it },
                     errorMessage = uiState.idProofImageError
@@ -188,7 +235,11 @@ fun CustomerFormScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                Text(text = "Payment Details", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                TranslatedText(
+                    englishText = "Payment Details",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
 
                 AmountInputWithStatus(
                     amount = amount,
@@ -207,7 +258,9 @@ fun CustomerFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = { navController.smartPopBack() }, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                    OutlinedButton(onClick = { navController.smartPopBack() }, modifier = Modifier.weight(1f)) { 
+                        TranslatedText("Cancel") 
+                    }
 
                     Button(
                         onClick = {
@@ -247,7 +300,9 @@ fun CustomerFormScreen(
                         if (uiState.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         } else {
-                            Text(if (mode is CustomerFormMode.Add) "Add Customer" else "Update Customer")
+                            TranslatedText(
+                                if (mode is CustomerFormMode.Add) "Add Customer" else "Update Customer"
+                            )
                         }
                     }
                 }
@@ -259,13 +314,17 @@ fun CustomerFormScreen(
         AlertDialog(
             onDismissRequest = { if (!uiState.isLoading) showDeleteDialog = false },
             icon = {},
-            title = { Text("Delete Customer") },
-            text = { Text("Are you sure you want to delete this customer? This action cannot be undone.") },
+            title = { TranslatedText("Delete Customer") },
+            text = { TranslatedText("Are you sure you want to delete this customer? This action cannot be undone.") },
             confirmButton = {
-                Button(onClick = { viewModel.deleteCustomer(mode.customerId) }, enabled = !uiState.isLoading) { Text("Delete") }
+                Button(onClick = { viewModel.deleteCustomer(mode.customerId) }, enabled = !uiState.isLoading) { 
+                    TranslatedText("Delete") 
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { if (!uiState.isLoading) showDeleteDialog = false }) { Text("Cancel") }
+                OutlinedButton(onClick = { if (!uiState.isLoading) showDeleteDialog = false }) { 
+                    TranslatedText("Cancel") 
+                }
             }
         )
     }

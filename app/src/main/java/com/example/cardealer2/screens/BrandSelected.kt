@@ -39,6 +39,9 @@ import com.example.cardealer2.ViewModel.BrandSelectedViewModel
 import com.example.cardealer2.ViewModel.HomeScreenViewModel
 import com.example.cardealer2.data.VehicleSummary
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +51,10 @@ fun BrandSelected(
     navController: NavController,
     homeScreenViewModel: HomeScreenViewModel,
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     val viewModel: BrandSelectedViewModel = viewModel()
     val brands by homeScreenViewModel.brands.collectAsState()
     val brand by viewModel.brand.collectAsState()
@@ -57,8 +64,14 @@ fun BrandSelected(
     var searchText by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
     var showSearch by remember { mutableStateOf(false) }
+    var backButtonClicked by remember { mutableStateOf(false) }
 
-    val tabs = listOf("Cars" to Icons.Default.DirectionsCar, "Bikes" to Icons.Default.TwoWheeler)
+    val tabs = remember(isPunjabiEnabled) {
+        listOf(
+            TranslationManager.translate("Cars", isPunjabiEnabled) to Icons.Default.DirectionsCar,
+            TranslationManager.translate("Bikes", isPunjabiEnabled) to Icons.Default.TwoWheeler
+        )
+    }
 
     // Load brands when screen appears
     LaunchedEffect(Unit) {
@@ -72,12 +85,17 @@ fun BrandSelected(
         }
     }
 
-    val subtitle = if (brand != null) {
-        val totalVehicles = brand!!.vehicle.size
-        val carCount = brand!!.vehicle.count { it.type.equals("car", true) }
-        val bikeCount = brand!!.vehicle.count { it.type.equals("bike", true) }
-        "$totalVehicles vehicles • $carCount cars • $bikeCount bikes"
-    } else null
+    val subtitle = remember(brand, isPunjabiEnabled) {
+        if (brand != null) {
+            val totalVehicles = brand!!.vehicle.size
+            val carCount = brand!!.vehicle.count { it.type.equals("car", true) }
+            val bikeCount = brand!!.vehicle.count { it.type.equals("bike", true) }
+            val vehiclesText = TranslationManager.translate("vehicles", isPunjabiEnabled)
+            val carsText = TranslationManager.translate("cars", isPunjabiEnabled)
+            val bikesText = TranslationManager.translate("bikes", isPunjabiEnabled)
+            "$totalVehicles $vehiclesText • $carCount $carsText • $bikeCount $bikesText"
+        } else null
+    }
 
     Scaffold(
         topBar = {
@@ -85,6 +103,12 @@ fun BrandSelected(
                 title = brandId.uppercase(Locale.ROOT),
                 subtitle = subtitle,
                 navController = navController,
+                onBackClick = {
+                    if (!backButtonClicked) {
+                        backButtonClicked = true
+                        navController.popBackStack()
+                    }
+                },
                 actions = {
                     IconButton(
                         onClick = { showSearch = !showSearch },
@@ -98,7 +122,10 @@ fun BrandSelected(
                     ) {
                         Icon(
                             if (showSearch) Icons.Default.Clear else Icons.Default.Search,
-                            contentDescription = if (showSearch) "Close Search" else "Search",
+                            contentDescription = if (showSearch) 
+                                TranslationManager.translate("Close Search", isPunjabiEnabled) 
+                            else 
+                                TranslationManager.translate("Search", isPunjabiEnabled),
                             tint = if (showSearch) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface
                         )
@@ -117,7 +144,7 @@ fun BrandSelected(
             ) {
                 Icon(
                     Icons.Default.Add,
-                    contentDescription = "Add Vehicle",
+                    contentDescription = TranslationManager.translate("Add Vehicle", isPunjabiEnabled),
                     tint = Color.White
                 )
             }
@@ -158,7 +185,7 @@ fun BrandSelected(
                         value = searchText,
                         onValueChange = { searchText = it },
                         placeholder = {
-                            Text(
+                            TranslatedText(
                                 "Search vehicles...",
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
@@ -169,7 +196,7 @@ fun BrandSelected(
                         leadingIcon = {
                             Icon(
                                 Icons.Default.Search,
-                                contentDescription = "Search",
+                                contentDescription = TranslationManager.translate("Search", isPunjabiEnabled),
                                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         },
@@ -178,7 +205,7 @@ fun BrandSelected(
                                 IconButton(onClick = { searchText = "" }) {
                                     Icon(
                                         Icons.Default.Clear,
-                                        contentDescription = "Clear",
+                                        contentDescription = TranslationManager.translate("Clear", isPunjabiEnabled),
                                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                     )
                                 }
@@ -281,14 +308,16 @@ fun BrandSelected(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val availableText = "${TranslationManager.translate("Available", isPunjabiEnabled)} ${tabs[selectedTab].first}"
                                 Text(
-                                    text = "Available ${tabs[selectedTab].first}",
+                                    text = availableText,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onBackground
                                 )
+                                val foundText = "${filteredVehicles.size} ${TranslationManager.translate("found", isPunjabiEnabled)}"
                                 Text(
-                                    text = "${filteredVehicles.size} found",
+                                    text = foundText,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                                 )
@@ -325,6 +354,9 @@ fun EnhancedVehicleCard(
     vehicle: VehicleSummary,
     onClickCard: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
     // Decreased the fixed height from 180.dp to 120.dp for a more compact card
     Box(
         modifier = Modifier
@@ -423,13 +455,14 @@ fun EnhancedVehicleCard(
                         ) {
                             Icon(
                                 Icons.Outlined.Tag,
-                                contentDescription = "Type of vehicle",
+                                contentDescription = TranslationManager.translate("Type of vehicle", isPunjabiEnabled),
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
+                            val typeText = "${TranslationManager.translate("Type:", isPunjabiEnabled)} ${vehicle.type}"
                             Text(
-                                text = "Type: ${vehicle.type}",
+                                text = typeText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.secondary,
                                 maxLines = 1,
@@ -450,13 +483,14 @@ fun EnhancedVehicleCard(
                         ) {
                             Icon(
                                 Icons.Outlined.Tag,
-                                contentDescription = "Number of vehicle",
+                                contentDescription = TranslationManager.translate("Number of vehicle", isPunjabiEnabled),
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
+                            val numberText = "${TranslationManager.translate("Number of vehicle:", isPunjabiEnabled)} ${vehicle.quantity}"
                             Text(
-                                text = "Number of vehicle: ${vehicle.quantity}",
+                                text = numberText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.secondary,
                                 maxLines = 1,
@@ -471,7 +505,7 @@ fun EnhancedVehicleCard(
             // Arrow Indicator
             Icon(
                 Icons.Default.ArrowBack,
-                contentDescription = "Go",
+                contentDescription = TranslationManager.translate("Go", isPunjabiEnabled),
                 modifier = Modifier
                     .size(20.dp)
                     .rotate(180f)
@@ -495,8 +529,8 @@ fun EnhancedLoadingState() {
                 strokeWidth = 4.dp
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Loading vehicles...",
+            TranslatedText(
+                "Loading vehicles...",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
             )
@@ -506,6 +540,10 @@ fun EnhancedLoadingState() {
 
 @Composable
 fun EnhancedErrorState(error: String) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -519,8 +557,8 @@ fun EnhancedErrorState(error: String) {
                 style = MaterialTheme.typography.displayMedium
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Something went wrong",
+            TranslatedText(
+                "Something went wrong",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.error
@@ -541,6 +579,10 @@ fun EnhancedEmptyVehicleState(
     selectedTab: Int,
     hasSearch: Boolean
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -551,7 +593,10 @@ fun EnhancedEmptyVehicleState(
         ) {
             val icon =
                 if (selectedTab == 0) Icons.Default.DirectionsCar else Icons.Default.TwoWheeler
-            val vehicleType = if (selectedTab == 0) "cars" else "bikes"
+            val vehicleType = if (selectedTab == 0) 
+                TranslationManager.translate("cars", isPunjabiEnabled) 
+            else 
+                TranslationManager.translate("bikes", isPunjabiEnabled)
 
             Surface(
                 modifier = Modifier.size(80.dp),
@@ -568,8 +613,13 @@ fun EnhancedEmptyVehicleState(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val noMatchText = if (hasSearch) {
+                "${TranslationManager.translate("No matching", isPunjabiEnabled)} $vehicleType ${TranslationManager.translate("found", isPunjabiEnabled)}"
+            } else {
+                "${TranslationManager.translate("No", isPunjabiEnabled)} $vehicleType ${TranslationManager.translate("available", isPunjabiEnabled)}"
+            }
             Text(
-                text = if (hasSearch) "No matching $vehicleType found" else "No $vehicleType available",
+                text = noMatchText,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -578,11 +628,13 @@ fun EnhancedEmptyVehicleState(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            val helpText = if (hasSearch) {
+                TranslationManager.translate("Try adjusting your search terms or check the other category.", isPunjabiEnabled)
+            } else {
+                "${TranslationManager.translate("This brand doesn't have any", isPunjabiEnabled)} $vehicleType ${TranslationManager.translate("in our inventory yet.", isPunjabiEnabled)}"
+            }
             Text(
-                text = if (hasSearch)
-                    "Try adjusting your search terms or check the other category."
-                else
-                    "This brand doesn't have any $vehicleType in our inventory yet.",
+                text = helpText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -593,6 +645,10 @@ fun EnhancedEmptyVehicleState(
 
 @Composable
 fun EnhancedEmptyDataState() {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -606,15 +662,15 @@ fun EnhancedEmptyDataState() {
                 style = MaterialTheme.typography.displayMedium
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "No brand data available",
+            TranslatedText(
+                "No brand data available",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Unable to load brand information at this time.",
+            TranslatedText(
+                "Unable to load brand information at this time.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center

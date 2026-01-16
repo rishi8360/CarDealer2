@@ -27,6 +27,8 @@ import androidx.compose.runtime.LaunchedEffect
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.EditActionButton
 import com.example.cardealer2.components.TransactionSection
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
@@ -38,6 +40,8 @@ fun BrokerDetailsScreen(
     val brokers by viewModel.brokers.collectAsState()
     val broker = brokers.firstOrNull { it.brokerId == brokerId }
     val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     LaunchedEffect(Unit) {
         // Ensure we have brokers loaded at least once
@@ -59,8 +63,8 @@ fun BrokerDetailsScreen(
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = broker?.name ?: "Broker Details",
-                subtitle = if (broker != null) "Broker Details" else null,
+                title = broker?.name ?: TranslationManager.translate("Broker Details", isPunjabiEnabled),
+                subtitle = if (broker != null) TranslationManager.translate("Broker Details", isPunjabiEnabled) else null,
                 navController = navController,
                 actions = {
                     if (broker != null) {
@@ -88,8 +92,8 @@ fun BrokerDetailsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Broker not found",
+                        TranslatedText(
+                            englishText = "Broker not found",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -164,8 +168,8 @@ fun BrokerDetailsScreen(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "Contact Information",
+                        TranslatedText(
+                            englishText = "Contact Information",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -186,8 +190,8 @@ fun BrokerDetailsScreen(
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
-                                Text(
-                                    text = "Phone Number",
+                                TranslatedText(
+                                    englishText = "Phone Number",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -212,13 +216,13 @@ fun BrokerDetailsScreen(
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
-                                Text(
-                                    text = "Address",
+                                TranslatedText(
+                                    englishText = "Address",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = broker.address.ifBlank { "No address provided" },
+                                    text = broker.address.ifBlank { TranslationManager.translate("No address provided", isPunjabiEnabled) },
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -242,8 +246,8 @@ fun BrokerDetailsScreen(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "Identity Proof",
+                        TranslatedText(
+                            englishText = "Identity Proof",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -252,14 +256,14 @@ fun BrokerDetailsScreen(
                         Divider()
 
                         if (broker.idProof.isEmpty()) {
-                            Text(
-                                text = "No ID proof documents available",
+                            TranslatedText(
+                                englishText = "No ID proof documents available",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            Text(
-                                text = "Documents",
+                            TranslatedText(
+                                englishText = "Documents",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -291,20 +295,21 @@ fun BrokerDetailsScreen(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.PictureAsPdf,
-                                                contentDescription = "PDF Document",
+                                                contentDescription = TranslationManager.translate("PDF Document", isPunjabiEnabled),
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.size(40.dp)
                                             )
                                             Spacer(modifier = Modifier.width(16.dp))
                                             Column(modifier = Modifier.weight(1f)) {
+                                                val docText = "${TranslationManager.translate("ID Proof Document", isPunjabiEnabled)} ${index + 1}"
                                                 Text(
-                                                    text = "ID Proof Document ${index + 1}",
+                                                    text = docText,
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.Medium,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                                 )
-                                                Text(
-                                                    text = "Tap to open PDF",
+                                                TranslatedText(
+                                                    englishText = "Tap to open PDF",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                                                 )
@@ -332,8 +337,8 @@ fun BrokerDetailsScreen(
                             .padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "Broker Bills",
+                        TranslatedText(
+                            englishText = "Broker Bills",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -342,14 +347,14 @@ fun BrokerDetailsScreen(
                         Divider()
 
                         if (broker.brokerBill.isEmpty()) {
-                            Text(
-                                text = "No broker bill documents available",
+                            TranslatedText(
+                                englishText = "No broker bill documents available",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            Text(
-                                text = "Documents",
+                            TranslatedText(
+                                englishText = "Documents",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -381,20 +386,21 @@ fun BrokerDetailsScreen(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.PictureAsPdf,
-                                                contentDescription = "PDF Document",
+                                                contentDescription = TranslationManager.translate("PDF Document", isPunjabiEnabled),
                                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.size(40.dp)
                                             )
                                             Spacer(modifier = Modifier.width(16.dp))
                                             Column(modifier = Modifier.weight(1f)) {
+                                                val billText = "${TranslationManager.translate("Broker Bill", isPunjabiEnabled)} ${index + 1}"
                                                 Text(
-                                                    text = "Broker Bill ${index + 1}",
+                                                    text = billText,
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.Medium,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                                 )
-                                                Text(
-                                                    text = "Tap to open PDF",
+                                                TranslatedText(
+                                                    englishText = "Tap to open PDF",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                                                 )

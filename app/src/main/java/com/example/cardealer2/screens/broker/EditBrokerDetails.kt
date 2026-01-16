@@ -24,6 +24,9 @@ import com.example.cardealer2.ViewModel.ViewBrokersViewModel
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.DeleteActionButton
 import com.example.cardealer2.utility.smartPopBack
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +39,10 @@ fun EditBrokerDetails(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val broker = brokers.firstOrNull { it.brokerId == brokerId }
+    
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     // Form state
     var brokerName by rememberSaveable { mutableStateOf("") }
@@ -138,7 +145,7 @@ fun EditBrokerDetails(
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Edit Broker Details",
+                title = TranslationManager.translate("Edit Broker Details", isPunjabiEnabled),
                 navController = navController,
                 onBackClick = {
                     if (isDirty && !isLoading) {
@@ -167,8 +174,8 @@ fun EditBrokerDetails(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Broker not found",
+                TranslatedText(
+                    englishText = "Broker not found",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -188,7 +195,7 @@ fun EditBrokerDetails(
             OutlinedTextField(
                 value = brokerName,
                 onValueChange = { brokerName = it },
-                label = { Text("Broker Name *") },
+                label = { TranslatedText("Broker Name *") },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading
             )
@@ -196,7 +203,7 @@ fun EditBrokerDetails(
             OutlinedTextField(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
-                label = { Text("Phone Number *") },
+                label = { TranslatedText("Phone Number *") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Phone),
                 enabled = !isLoading
@@ -205,7 +212,7 @@ fun EditBrokerDetails(
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it },
-                label = { Text("Address *") },
+                label = { TranslatedText("Address *") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
                 enabled = !isLoading
@@ -213,14 +220,14 @@ fun EditBrokerDetails(
 
             HorizontalDivider()
 
-            Text(
-                text = "ID Proof",
+            TranslatedText(
+                englishText = "ID Proof",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
 
             PdfPickerField(
-                label = "ID Proof PDFs",
+                label = TranslationManager.translate("ID Proof PDFs", isPunjabiEnabled),
                 pdfUrls = idProof,
                 onPdfChange = { idProof = it },
                 modifier = Modifier.fillMaxWidth()
@@ -228,14 +235,14 @@ fun EditBrokerDetails(
 
             HorizontalDivider()
 
-            Text(
-                text = "Broker Bill",
+            TranslatedText(
+                englishText = "Broker Bill",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
 
             PdfPickerField(
-                label = "Broker Bill PDFs",
+                label = TranslationManager.translate("Broker Bill PDFs", isPunjabiEnabled),
                 pdfUrls = brokerBill,
                 onPdfChange = { brokerBill = it },
                 modifier = Modifier.fillMaxWidth()
@@ -267,7 +274,7 @@ fun EditBrokerDetails(
                     modifier = Modifier.weight(1f),
                     enabled = !isLoading
                 ) {
-                    Text("Cancel")
+                    TranslatedText("Cancel")
                 }
 
                 Button(
@@ -288,7 +295,7 @@ fun EditBrokerDetails(
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("Update Broker")
+                        TranslatedText("Update Broker")
                     }
                 }
             }
@@ -300,8 +307,8 @@ fun EditBrokerDetails(
         AlertDialog(
             onDismissRequest = { if (!isLoading) showDeleteDialog = false },
             icon = {},
-            title = { Text("Delete Broker") },
-            text = { Text("Are you sure you want to delete this broker? This action cannot be undone.") },
+            title = { TranslatedText("Delete Broker") },
+            text = { TranslatedText("Are you sure you want to delete this broker? This action cannot be undone.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -311,7 +318,7 @@ fun EditBrokerDetails(
                     },
                     enabled = !isLoading
                 ) {
-                    Text("Delete")
+                    TranslatedText("Delete")
                 }
             },
             dismissButton = {
@@ -319,7 +326,7 @@ fun EditBrokerDetails(
                     onClick = { if (!isLoading) showDeleteDialog = false },
                     enabled = !isLoading
                 ) {
-                    Text("Cancel")
+                    TranslatedText("Cancel")
                 }
             }
         )
@@ -330,8 +337,8 @@ fun EditBrokerDetails(
         AlertDialog(
             onDismissRequest = { if (!isLoading) showUnsavedDialog = false },
             icon = {},
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Do you want to discard them and go back?") },
+            title = { TranslatedText("Discard changes?") },
+            text = { TranslatedText("You have unsaved changes. Do you want to discard them and go back?") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -340,7 +347,7 @@ fun EditBrokerDetails(
                     },
                     enabled = !isLoading
                 ) {
-                    Text("Discard")
+                    TranslatedText("Discard")
                 }
             },
             dismissButton = {
@@ -348,7 +355,7 @@ fun EditBrokerDetails(
                     onClick = { if (!isLoading) showUnsavedDialog = false },
                     enabled = !isLoading
                 ) {
-                    Text("Keep Editing")
+                    TranslatedText("Keep Editing")
                 }
             }
         )

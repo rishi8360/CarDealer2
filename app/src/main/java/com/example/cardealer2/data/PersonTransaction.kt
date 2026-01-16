@@ -18,11 +18,13 @@ data class PersonTransaction(
     val cashAmount: Double = 0.0,                // Cash portion
     val bankAmount: Double = 0.0,                // Bank portion
     val creditAmount: Double = 0.0,              // Credit portion
-    val date: Long = System.currentTimeMillis(), // Transaction date (timestamp as Long)
+    val date: String = "",                       // Transaction date (date only as String in format "yyyy-MM-dd")
     val orderNumber: Int? = null,                // Order number (for purchases)
+    val transactionNumber: Int? = null,          // Unique transaction number (primary record identifier)
     val description: String = "",                // Human-readable description
     val status: String = "COMPLETED",            // "COMPLETED", "PENDING", "CANCELLED"
-    val createdAt: Long = System.currentTimeMillis() // Record creation timestamp
+    val createdAt: Long = System.currentTimeMillis(), // Record creation timestamp
+    val note: String = ""                        // Optional note for the transaction
 )
 
 // Transaction type constants
@@ -54,5 +56,6 @@ object TransactionStatus {
     const val PENDING = "PENDING"
     const val CANCELLED = "CANCELLED"
 }
+
 
 

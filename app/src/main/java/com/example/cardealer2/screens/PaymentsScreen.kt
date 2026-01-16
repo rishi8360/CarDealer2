@@ -1,15 +1,22 @@
 package com.example.cardealer2.screens
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Payment
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,8 +30,14 @@ import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Product
 import com.example.cardealer2.data.VehicleSale
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utility.DatePickerButton
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import androidx.compose.ui.platform.LocalContext
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,20 +51,30 @@ fun PaymentsScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     
-    var selectedTabIndex by remember { mutableStateOf(0) }
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
     
-    val tabs = listOf("All Purchases", "Due Today", "Completed")
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    
+    val tabs = remember(isPunjabiEnabled) {
+        listOf(
+            TranslationManager.translate("All Purchases", isPunjabiEnabled),
+            TranslationManager.translate("Due Today", isPunjabiEnabled),
+            TranslationManager.translate("Completed", isPunjabiEnabled)
+        )
+    }
     
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Payments",
+                title = TranslationManager.translate("Payments", isPunjabiEnabled),
                 navController = navController,
                 actions = {
                     IconButton(onClick = { navController.navigate("emi_due") }) {
                         Icon(
                             imageVector = Icons.Outlined.Event,
-                            contentDescription = "View EMI schedule"
+                            contentDescription = TranslationManager.translate("View EMI schedule", isPunjabiEnabled)
                         )
                     }
                 }
@@ -94,8 +117,8 @@ fun PaymentsScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "Error",
+                                TranslatedText(
+                                    englishText = "Error",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -129,8 +152,8 @@ fun PaymentsScreen(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = when (selectedTabIndex) {
+                                    TranslatedText(
+                                        englishText = when (selectedTabIndex) {
                                             0 -> "No purchases found"
                                             1 -> "No payments due today"
                                             2 -> "No completed purchases"
@@ -150,8 +173,8 @@ fun PaymentsScreen(
                                 items(salesToShow) { saleDetail ->
                                     PaymentItemCard(
                                         saleDetail = saleDetail,
-                                        onRecordPayment = { saleId, cashAmount, bankAmount ->
-                                            viewModel.recordEmiPayment(saleId, cashAmount, bankAmount)
+                                        onRecordPayment = { sale, emiDetails, cashAmount, bankAmount, note, date ->
+                                            viewModel.recordEmiPayment(sale, emiDetails, cashAmount, bankAmount, note, date)
                                         }
                                     )
                                 }
@@ -164,14 +187,19 @@ fun PaymentsScreen(
     }
 }
 
+@SuppressLint("DefaultLocale")
 @Composable
 fun PaymentItemCard(
     saleDetail: PaymentsViewModel.SaleWithDetails,
-    onRecordPayment: (String, Double, Double) -> Unit
+    onRecordPayment: (com.example.cardealer2.data.VehicleSale, com.example.cardealer2.data.EmiDetails, Double, Double, String, String) -> Unit
 ) {
     val sale = saleDetail.sale
     val customer = saleDetail.customer
     val vehicle = saleDetail.vehicle
+    
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
     
     var showPaymentDialog by remember { mutableStateOf(false) }
     
@@ -194,33 +222,31 @@ fun PaymentItemCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = customer?.customerName ?: "Unknown Customer",
+                        text = customer?.customerName ?: TranslationManager.translate("Unknown Customer", isPunjabiEnabled),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = vehicle?.productId ?: "Unknown Vehicle",
+                        text = vehicle?.productId ?: TranslationManager.translate("Unknown Vehicle", isPunjabiEnabled),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = when (sale.status) {
-                        "Active" -> MaterialTheme.colorScheme.primaryContainer
-                        "Completed" -> MaterialTheme.colorScheme.tertiaryContainer
-                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    color = when {
+                        sale.status -> MaterialTheme.colorScheme.tertiaryContainer  // true = completed
+                        else -> MaterialTheme.colorScheme.primaryContainer  // false = pending
                     }
                 ) {
                     Text(
-                        text = sale.status,
+                        text = if (sale.status) TranslationManager.translate("Completed", isPunjabiEnabled) else TranslationManager.translate("Pending", isPunjabiEnabled),
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Medium,
-                        color = when (sale.status) {
-                            "Active" -> MaterialTheme.colorScheme.onPrimaryContainer
-                            "Completed" -> MaterialTheme.colorScheme.onTertiaryContainer
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        color = when {
+                            sale.status -> MaterialTheme.colorScheme.onTertiaryContainer
+                            else -> MaterialTheme.colorScheme.onPrimaryContainer
                         }
                     )
                 }
@@ -238,8 +264,8 @@ fun PaymentItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text(
-                        text = "Total Amount",
+                    TranslatedText(
+                        englishText = "Total Amount",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -250,41 +276,28 @@ fun PaymentItemCard(
                     )
                 }
                 
-                when (sale.purchaseType) {
-                    "FULL_PAYMENT" -> {
+                when {
+                    !sale.emi -> {
+                        // Full payment (not EMI)
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Paid in Full",
+                            TranslatedText(
+                                englishText = "Paid in Full",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            val paidAmount = if (sale.downPayment > 0) sale.downPayment else sale.totalAmount
                             Text(
-                                text = "₹${String.format("%.2f", paidAmount)}",
+                                text = "₹${String.format("%.2f", sale.totalAmount)}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium
                             )
                         }
                     }
-                    "DOWN_PAYMENT" -> {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Down Payment",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "₹${String.format("%.2f", sale.downPayment)}",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                    "EMI" -> {
-                        sale.emiDetails?.let { emi ->
+                    sale.emi -> {
+                        // EMI payment
+                        saleDetail.emiDetails?.let { emi ->
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = "Next Due Date",
+                                TranslatedText(
+                                    englishText = "Next Due Date",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -294,8 +307,9 @@ fun PaymentItemCard(
                                     fontWeight = FontWeight.Medium
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
+                                val remainingText = "${TranslationManager.translate("Remaining:", isPunjabiEnabled)} ${emi.remainingInstallments}"
                                 Text(
-                                    text = "Remaining: ${emi.remainingInstallments}",
+                                    text = remainingText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -306,8 +320,8 @@ fun PaymentItemCard(
             }
             
             // EMI Details
-            if (sale.purchaseType == "EMI" && sale.status == "Active") {
-                sale.emiDetails?.let { emi ->
+            if (sale.emi && !sale.status) {  // is EMI and pending (not completed)
+                saleDetail.emiDetails?.let { emi ->
                     Spacer(modifier = Modifier.height(12.dp))
                     Divider()
                     Spacer(modifier = Modifier.height(12.dp))
@@ -317,8 +331,8 @@ fun PaymentItemCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text(
-                                text = "EMI Amount",
+                            TranslatedText(
+                                englishText = "EMI Amount",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -337,7 +351,7 @@ fun PaymentItemCard(
                                     containerColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
-                                Text("Record Payment")
+                                TranslatedText("Record Payment")
                             }
                         }
                     }
@@ -347,11 +361,12 @@ fun PaymentItemCard(
     }
     
     // Payment Dialog
-    if (showPaymentDialog) {
+    if (showPaymentDialog && saleDetail.emiDetails != null) {
         SplitPaymentDialog(
             sale = sale,
-            onPaymentRecorded = { cashAmount, bankAmount ->
-                onRecordPayment(sale.saleId, cashAmount, bankAmount)
+            emiDetails = saleDetail.emiDetails,
+            onPaymentRecorded = { cashAmount, bankAmount, note, date ->
+                onRecordPayment(sale, saleDetail.emiDetails!!, cashAmount, bankAmount, note, date)
                 showPaymentDialog = false
             },
             onDismiss = { showPaymentDialog = false }
@@ -362,26 +377,31 @@ fun PaymentItemCard(
 @Composable
 fun SplitPaymentDialog(
     sale: VehicleSale,
-    onPaymentRecorded: (Double, Double) -> Unit,
-    onDismiss: () -> Unit
+    onPaymentRecorded: (Double, Double, String, String) -> Unit,
+    onDismiss: () -> Unit,
+    emiDetails: com.example.cardealer2.data.EmiDetails? = null
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     var cashAmount by remember { mutableStateOf("") }
     var bankAmount by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
     var cashError by remember { mutableStateOf<String?>(null) }
     var bankError by remember { mutableStateOf<String?>(null) }
     var totalError by remember { mutableStateOf<String?>(null) }
-    val emiAmount = sale.emiDetails?.installmentAmount ?: 0.0
+    val emiAmount = emiDetails?.installmentAmount ?: 0.0
     
-    LaunchedEffect(emiAmount) {
-        if (emiAmount > 0 && cashAmount.isEmpty() && bankAmount.isEmpty()) {
-            bankAmount = String.format(Locale.getDefault(), "%.2f", emiAmount)
-        }
-    }
+    // Date picker state
+    var selectedDate by remember { mutableStateOf("") }
+    
+
     
     fun parseAmount(value: String): Double =
         value.toDoubleOrNull()?.takeIf { it >= 0 } ?: 0.0
     
-    fun normalizeValues(changedCash: Boolean) {
+    fun validateInputs() {
         cashError = null
         bankError = null
         totalError = null
@@ -390,37 +410,23 @@ fun SplitPaymentDialog(
         val bank = parseAmount(bankAmount)
         val total = cash + bank
         
-        if (changedCash) {
-            if (emiAmount > 0) {
-                val remaining = (emiAmount - cash).coerceAtLeast(0.0)
-                bankAmount = String.format(Locale.getDefault(), "%.2f", remaining)
-            }
-        } else {
-            if (emiAmount > 0) {
-                val remaining = (emiAmount - bank).coerceAtLeast(0.0)
-                cashAmount = String.format(Locale.getDefault(), "%.2f", remaining)
-            }
-        }
+        // Only validate, don't auto-calculate
+        if (cash < 0) cashError = TranslationManager.translate("Cash cannot be negative", isPunjabiEnabled)
+        if (bank < 0) bankError = TranslationManager.translate("Bank cannot be negative", isPunjabiEnabled)
         
-        if (cash < 0) cashError = "Cash cannot be negative"
-        if (bank < 0) bankError = "Bank cannot be negative"
-        
-        if (emiAmount > 0) {
-            if (parseAmount(cashAmount) + parseAmount(bankAmount) > emiAmount + 0.01) {
-                totalError = "Total exceeds EMI amount (₹${String.format(Locale.getDefault(), "%.2f", emiAmount)})"
-            }
-        } else if (total <= 0) {
-            totalError = "Enter cash or bank amount"
+        if (total <= 0) {
+            totalError = TranslationManager.translate("Enter cash or bank amount", isPunjabiEnabled)
         }
     }
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Record Payment") },
+        title = { TranslatedText("Record Payment") },
         text = {
             Column {
+                val emiAmountText = "${TranslationManager.translate("EMI Amount:", isPunjabiEnabled)} ₹${String.format("%.2f", emiAmount)}"
                 Text(
-                    text = "EMI Amount: ₹${String.format("%.2f", emiAmount)}",
+                    text = emiAmountText,
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -428,9 +434,9 @@ fun SplitPaymentDialog(
                     value = cashAmount,
                     onValueChange = {
                         cashAmount = it
-                        normalizeValues(changedCash = true)
+                        validateInputs()
                     },
-                    label = { Text("Cash Amount") },
+                    label = { TranslatedText("Cash Amount") },
                     isError = cashError != null,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -451,9 +457,9 @@ fun SplitPaymentDialog(
                     value = bankAmount,
                     onValueChange = {
                         bankAmount = it
-                        normalizeValues(changedCash = false)
+                        validateInputs()
                     },
-                    label = { Text("Bank Amount") },
+                    label = { TranslatedText("Bank Amount") },
                     isError = bankError != null,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -477,26 +483,163 @@ fun SplitPaymentDialog(
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
+                
+                // Calculate and display payment difference
+                val totalPaid = parseAmount(cashAmount) + parseAmount(bankAmount)
+                val difference = totalPaid - emiAmount
+                
+                if (totalPaid > 0) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Payment Summary Card
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Total Amount Paid
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = TranslationManager.translate("Total Amount Paid:", isPunjabiEnabled),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "₹${String.format(Locale.getDefault(), "%.2f", totalPaid)}",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            // Difference Amount
+                            if (emiAmount > 0) {
+                                HorizontalDivider(
+                                    thickness = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant
+                                )
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                difference > 0 -> Icons.Outlined.Add
+                                                difference < 0 -> Icons.Outlined.Remove
+                                                else -> Icons.Outlined.AttachMoney
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = when {
+                                                difference > 0 -> Color(0xFF4CAF50) // Green for extra
+                                                difference < 0 -> MaterialTheme.colorScheme.error // Red for short
+                                                else -> MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                        Text(
+                                            text = when {
+                                                difference > 0 -> TranslationManager.translate("Extra Payment:", isPunjabiEnabled)
+                                                difference < 0 -> TranslationManager.translate("Short Payment:", isPunjabiEnabled)
+                                                else -> TranslationManager.translate("Difference:", isPunjabiEnabled)
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        text = "${if (difference >= 0) "+" else ""}₹${String.format(Locale.getDefault(), "%.2f", abs(difference))}",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            difference > 0 -> Color(0xFF4CAF50) // Green for extra
+                                            difference < 0 -> MaterialTheme.colorScheme.error // Red for short
+                                            else -> MaterialTheme.colorScheme.primary
+                                        }
+                                    )
+                                }
+                                
+                                // Customer notification message
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Info,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = TranslationManager.translate("This amount will be shown to the customer", isPunjabiEnabled),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Date Picker Button
+                DatePickerButton(
+                    selectedDate = selectedDate,
+                    onDateSelected = { selectedDate = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { TranslatedText("Note (Optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
+                    leadingIcon = { Icon(Icons.Outlined.Description, null) }
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     val cash = cashAmount.toDoubleOrNull() ?: 0.0
-                    val bank = bankAmount.toDoubleOrNull() ?: (if (cash <= 0.0) emiAmount else 0.0)
-                    onPaymentRecorded(cash, bank)
+                    val bank = bankAmount.toDoubleOrNull() ?: 0.0
+                    onPaymentRecorded(cash, bank, note, selectedDate)
                 },
                 enabled = totalError == null && (
                     (cashAmount.toDoubleOrNull() ?: 0.0) +
                     (bankAmount.toDoubleOrNull() ?: 0.0) > 0.0 || emiAmount > 0
                 )
             ) {
-                Text("Record")
+                TranslatedText("Record")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                TranslatedText("Cancel")
             }
         }
     )

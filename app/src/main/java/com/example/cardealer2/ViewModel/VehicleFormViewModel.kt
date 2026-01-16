@@ -233,6 +233,7 @@ class VehicleFormViewModel(
         lastService: String,
         previousOwners: String,
         price: String,
+        sellingPrice: String,
         year: String,
         type: String,
         nocPdfs: List<String> = emptyList(),
@@ -264,6 +265,7 @@ class VehicleFormViewModel(
                     lastService = lastService,
                     previousOwners = previousOwners.toIntOrNull() ?: 0,
                     price = price.toIntOrNull() ?: 0,
+                    sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
                     type = type,
                     noc = emptyList(), // Will be uploaded
@@ -303,11 +305,13 @@ class VehicleFormViewModel(
         lastService: String,
         previousOwners: String,
         price: String,
+        sellingPrice: String,
         year: String,
         type: String,
         nocPdfs: List<String> = emptyList(),
         rcPdfs: List<String> = emptyList(),
         insurancePdfs: List<String> = emptyList(),
+        vehicleOtherDocPdfs: List<String> = emptyList(),
         brokerOrMiddleMan: String = "",
         owner: String = ""
     ) {
@@ -334,11 +338,13 @@ class VehicleFormViewModel(
                     lastService = lastService,
                     previousOwners = previousOwners.toIntOrNull() ?: 0,
                     price = price.toIntOrNull() ?: 0,
+                    sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
                     type = type,
                     noc = nocPdfs,
                     rc = rcPdfs,
                     insurance = insurancePdfs,
+                    vehicleOtherDoc = vehicleOtherDocPdfs,
                     brokerOrMiddleMan = brokerOrMiddleMan,
                     owner = owner
                 )

@@ -14,11 +14,13 @@ data class Product(
 
     val previousOwners: Int=0,
     val price: Int = 0,
+    val sellingPrice: Int = 0,
     val year: Int = 0,
     val type:String ="",
     val noc: List<String> = emptyList(),
     val rc: List<String> = emptyList(),
     val insurance: List<String> = emptyList(),
+    val vehicleOtherDoc: List<String> = emptyList(),
     val brokerOrMiddleMan: String = "",
     val owner: String = "",
     val brokerOrMiddleManRef: DocumentReference? = null,

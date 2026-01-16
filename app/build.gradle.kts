@@ -52,6 +52,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.foundation)
+    implementation(libs.androidx.animation)
+    implementation(libs.foundation)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -99,6 +101,9 @@ dependencies {
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
     implementation("me.saket.telephoto:zoomable-image-coil:0.18.0")
     implementation("androidx.compose.runtime:runtime-livedata:1.9.3")
+
+    // DataStore for preferences
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
 
 
 

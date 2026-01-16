@@ -20,14 +20,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.AsyncImage
 import com.example.cardealer2.ViewModel.HomeScreenViewModel
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import com.example.cardealer2.utils.TranslationDictionary
+import com.example.cardealer2.repository.CompanyRepository
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -42,15 +50,37 @@ fun HomeScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val filter by viewModel.filteredBrands.collectAsState()
+    val currentRoute by navController.currentBackStackEntryAsState()
+    
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadBrands()
+    
+    // Track navigation to prevent race condition when opening drawer immediately after back button
+    var canOpenDrawer by remember { mutableStateOf(true) }
+    
+    // Reset drawer state when returning to this screen
+    LaunchedEffect(currentRoute?.id) {
+        if (currentRoute?.destination?.route == "home") {
+            // Prevent drawer from opening immediately after navigation to avoid race condition
+            canOpenDrawer = false
+            // Close drawer if open
+            if (drawerState.isOpen) {
+                drawerState.close()
+            }
+            // Small delay to prevent race condition with rapid back button + drawer open
+            delay(150)
+            canOpenDrawer = true
+        }
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // Use explicit Color.Black instead of scrim to prevent black screen issues
+        scrimColor = Color.Black.copy(alpha = 0.5f),
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -82,11 +112,14 @@ fun HomeScreen(
                         }
                     },
                     onPurchaseVehicleClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("purchase_vehicle") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch {
+                            drawerState.close()
+                            // Wait for drawer to close before navigating
+                            navController.navigate("purchase_vehicle") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onCatalogSelection = {
@@ -108,6 +141,14 @@ fun HomeScreen(
                     onAllTransactionsClick = {
                         scope.launch { drawerState.close() }
                         navController.navigate("all_transactions") {
+                            popUpTo("home") { inclusive = false }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onSettingsClick = {
+                        scope.launch { drawerState.close() }
+                        navController.navigate("settings") {
                             popUpTo("home") { inclusive = false }
                             launchSingleTop = true
                             restoreState = true
@@ -136,28 +177,39 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { scope.launch { drawerState.open() } },
-                        modifier = Modifier
-                            .shadow(4.dp, CircleShape)
-                            .background(MaterialTheme.colorScheme.surface, CircleShape)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Menu,
-                            contentDescription = "Menu",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                        IconButton(
+                            onClick = { 
+                                // Prevent opening drawer immediately after navigation to avoid race condition
+                                if (canOpenDrawer) {
+                                    scope.launch { drawerState.open() }
+                                }
+                            },
+                            modifier = Modifier
+                                .shadow(4.dp, CircleShape)
+                                .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Menu,
+                                contentDescription = TranslationManager.translate("Menu", isPunjabiEnabled),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val company by CompanyRepository.company.collectAsState()
                         Text(
-                            text = "Car Dealer",
+                            text = company.name.ifEmpty { "Car Dealer" },
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Text(
-                            text = "Find your perfect vehicle",
+                        TranslatedText(
+                            englishText = "Find your perfect vehicle",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                         )
@@ -182,16 +234,21 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Popular Brands",
+                    TranslatedText(
+                        englishText = "Popular Brands",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
 
                     if (filter.isNotEmpty()) {
+                        val brandsText = if (isPunjabiEnabled) {
+                            "${filter.size} ${TranslationDictionary.translate("brands")}"
+                        } else {
+                            "${filter.size} brands"
+                        }
                         Text(
-                            text = "${brands.size} brands",
+                            text = brandsText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
@@ -213,8 +270,8 @@ fun HomeScreen(
                                     strokeWidth = 4.dp
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Loading brands...",
+                                TranslatedText(
+                                    englishText = "Loading brands...",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                                 )
@@ -229,8 +286,8 @@ fun HomeScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(text = "⚠️", style = MaterialTheme.typography.displaySmall)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Something went wrong",
+                                TranslatedText(
+                                    englishText = "Something went wrong",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.error
@@ -241,6 +298,35 @@ fun HomeScreen(
                                     color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.padding(horizontal = 32.dp)
+                                )
+                            }
+                        }
+                    }
+                    filter.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                TranslatedText(
+                                    englishText = "No brands found",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                TranslatedText(
+                                    englishText = if (brands.isEmpty()) "No brands available" else "Try adjusting your search",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp)
                                 )
                             }
                         }
@@ -280,8 +366,14 @@ fun DrawerContent(
     onCatalogSelection:()->Unit,
     onEmiScheduleClick: () -> Unit,
     onAllTransactionsClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    val company by CompanyRepository.company.collectAsState()
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -314,13 +406,13 @@ fun DrawerContent(
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Car Dealer",
+                        text = company.name.ifEmpty { "Car Dealer" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Text(
-                        text = "Management System",
+                    TranslatedText(
+                        englishText = "Management System",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
@@ -338,51 +430,54 @@ fun DrawerContent(
         DrawerMenuItem(
             icon = Icons.Default.PersonAdd,
             title = "Add Customer",
-            onClick = onAddCustomerClick
+            onClick = onAddCustomerClick,
+            isPunjabiEnabled = isPunjabiEnabled
         )
 
         DrawerMenuItem(
             icon = Icons.Default.People,
             title = "View Customers",
-            onClick = {onViewCustomersClick() }
+            onClick = {onViewCustomersClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
 
         DrawerMenuItem(
             icon = Icons.Default.Business,
             title = "Brokers",
-            onClick = { onViewBrokersClick() }
+            onClick = { onViewBrokersClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
 
         DrawerMenuItem(
             icon = Icons.Default.ShoppingCart,
             title = "Purchase Vehicle",
-            onClick = { onPurchaseVehicleClick() }
+            onClick = { onPurchaseVehicleClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
 
-      /*  DrawerMenuItem(
-            icon = Icons.Default.CarRental,
-            title = "All Vehicles",
-            onClick = { /* Navigate to all vehicles */ }
-        )
+
 
         DrawerMenuItem(
             icon = Icons.Default.PictureAsPdf,
             title = "Generate Catalog",
             onClick = {
                 onCatalogSelection()
-            }
+            },
+            isPunjabiEnabled = isPunjabiEnabled
         )
-*/
+
         DrawerMenuItem(
             icon = Icons.Default.Payments,
             title = "EMI Schedule",
-            onClick = { onEmiScheduleClick() }
+            onClick = { onEmiScheduleClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
         
         DrawerMenuItem(
             icon = Icons.Default.Receipt,
             title = "All Transactions",
-            onClick = { onAllTransactionsClick() }
+            onClick = { onAllTransactionsClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
         
     /*    DrawerMenuItem(
@@ -399,26 +494,26 @@ fun DrawerContent(
 
         Spacer(Modifier.height(8.dp))
 
-        /*       DrawerMenuItem(
+        DrawerMenuItem(
             icon = Icons.Default.Settings,
             title = "Settings",
-            onClick = { /* Navigate to settings */ }
+            onClick = { onSettingsClick() },
+            isPunjabiEnabled = isPunjabiEnabled
         )
-
-      DrawerMenuItem(
-            icon = Icons.Default.Info,
-            title = "About",
-            onClick = { /* Navigate to about */ }
-        )
-   */ }
+    }
 }
 
 @Composable
 fun DrawerMenuItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isPunjabiEnabled: Boolean = false
 ) {
+    val translatedTitle = remember(title, isPunjabiEnabled) {
+        TranslationManager.translate(title, isPunjabiEnabled)
+    }
+    
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -435,12 +530,12 @@ fun DrawerMenuItem(
         ) {
             Icon(
                 icon,
-                contentDescription = title,
+                contentDescription = translatedTitle,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
             Spacer(Modifier.width(16.dp))
             Text(
-                text = title,
+                text = translatedTitle,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -454,6 +549,9 @@ fun EnhancedSearchBar(
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
 
     OutlinedTextField(
         value = text,
@@ -462,8 +560,8 @@ fun EnhancedSearchBar(
             onSearch(it)
         },
         placeholder = {
-            Text(
-                "Search brands...",
+            TranslatedText(
+                englishText = "Search brands...",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         },
@@ -473,7 +571,7 @@ fun EnhancedSearchBar(
         leadingIcon = {
             Icon(
                 Icons.Default.Search,
-                contentDescription = "Search",
+                contentDescription = TranslationManager.translate("Search", isPunjabiEnabled),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
         },
@@ -496,6 +594,9 @@ fun EnhancedBrandCard(
     totalVehicles: Int,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -523,8 +624,8 @@ fun EnhancedBrandCard(
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = brandName,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    contentScale = ContentScale.Fit
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
 
@@ -544,8 +645,13 @@ fun EnhancedBrandCard(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                 ) {
+                    val vehiclesText = if (isPunjabiEnabled) {
+                        "$totalVehicles ${TranslationDictionary.translate("vehicles")}"
+                    } else {
+                        "$totalVehicles vehicles"
+                    }
                     Text(
-                        text = "$totalVehicles vehicles",
+                        text = vehiclesText,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium,

@@ -1,6 +1,8 @@
 package com.example.cardealer2.screens.catalog
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -14,32 +16,41 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.cardealer2.utility.ConsistentTopAppBar
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PdfViewerScreen(
     pdfFilePath: String,
-    navController: NavController
+    navController: NavController,
+    catalogId: String? = null
 ) {
     val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
     val file = remember(pdfFilePath) { File(pdfFilePath) }
     val fileExists = remember(file) { file.exists() && file.length() > 0 }
     
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Catalog Generated",
-                subtitle = if (fileExists) "PDF is ready to share" else "PDF generation completed",
+                title = TranslationManager.translate("Catalog Generated", isPunjabiEnabled),
+                subtitle = if (fileExists) 
+                    TranslationManager.translate("PDF is ready to share", isPunjabiEnabled) 
+                else 
+                    TranslationManager.translate("PDF generation completed", isPunjabiEnabled),
                 navController = navController,
                 actions = {
                     if (fileExists) {
                         IconButton(
-                            onClick = { sharePdf(context, pdfFilePath) }
+                            onClick = { shareCatalogLinkViaWhatsApp(context, catalogId) }
                         ) {
                             Icon(
                                 Icons.Default.Share,
-                                contentDescription = "Share PDF",
+                                contentDescription = TranslationManager.translate("Share PDF", isPunjabiEnabled),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -80,8 +91,8 @@ fun PdfViewerScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                Text(
-                    text = if (fileExists) "Catalog Generated Successfully!" else "PDF Generation Failed",
+                TranslatedText(
+                    englishText = if (fileExists) "Catalog Generated Successfully!" else "PDF Generation Failed",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -89,8 +100,8 @@ fun PdfViewerScreen(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                Text(
-                    text = if (fileExists) 
+                TranslatedText(
+                    englishText = if (fileExists) 
                         "Your catalog PDF is ready to share. Tap the share button above to share it."
                     else 
                         "The PDF file could not be generated. Please try again.",
@@ -102,7 +113,7 @@ fun PdfViewerScreen(
                     Spacer(modifier = Modifier.height(32.dp))
                     
                     Button(
-                        onClick = { sharePdf(context, pdfFilePath) },
+                        onClick = { shareCatalogLinkViaWhatsApp(context, catalogId) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(
@@ -111,19 +122,61 @@ fun PdfViewerScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share PDF")
+                        TranslatedText("Share PDF")
                     }
                     
                     Spacer(modifier = Modifier.height(12.dp))
                     
+                    val fileText = "${TranslationManager.translate("File:", isPunjabiEnabled)} ${file.name}"
                     Text(
-                        text = "File: ${file.name}",
+                        text = fileText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
             }
         }
+    }
+}
+
+fun shareCatalogLinkViaWhatsApp(context: android.content.Context, catalogId: String?) {
+    try {
+        // Build the catalog URL with ID
+        val baseUrl = "https://smartattend.me/CarDealer/?id="
+        val catalogUrl = if (!catalogId.isNullOrBlank()) {
+            "$baseUrl$catalogId"
+        } else {
+            "${baseUrl}e2H81AOv3EmeHea6IRON"  // Fallback to default ID if not provided
+        }
+        
+        // Create message text with the link
+        val messageText = "Check out our vehicle catalog: $catalogUrl"
+        
+        // Create intent to share via WhatsApp
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, messageText)
+            // Try to open WhatsApp directly
+            setPackage("com.whatsapp")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        
+        // Check if WhatsApp is installed, otherwise show chooser
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            // WhatsApp not installed, show chooser with all apps
+            val chooserIntent = Intent.createChooser(
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, messageText)
+                },
+                "Share catalog link via"
+            )
+            context.startActivity(chooserIntent)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
 }
 

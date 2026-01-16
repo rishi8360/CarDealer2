@@ -173,9 +173,14 @@ fun TransactionItem(
 ) {
     val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale("en", "IN")) }
     val dateFormatter = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
+    val dateInputFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
-    val transactionDate = transaction.date
-    val dateText = dateFormatter.format(transactionDate)
+    val dateText = try {
+        val parsedDate = dateInputFormatter.parse(transaction.date) ?: Date()
+        dateFormatter.format(parsedDate)
+    } catch (e: Exception) {
+        transaction.date // Fallback to raw string if parsing fails
+    }
 
     // Simple color coding
     val amountColor = when (transaction.type) {
@@ -293,11 +298,22 @@ fun TransactionCard(
 ) {
     val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale("en", "IN")) }
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val dateInputFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
 
-    val transactionDate = transaction.date
-    val dateText = dateFormatter.format(transactionDate)
-    val timeText = timeFormatter.format(transactionDate)
+    val dateText = try {
+        val parsedDate = dateInputFormatter.parse(transaction.date) ?: Date()
+        dateFormatter.format(parsedDate)
+    } catch (e: Exception) {
+        transaction.date // Fallback to raw string if parsing fails
+    }
+    
+    // Since date is only a date string (no time), use createdAt timestamp for time
+    val timeText = try {
+        timeFormatter.format(Date(transaction.createdAt))
+    } catch (e: Exception) {
+        ""
+    }
 
     val amountColor = when (transaction.type) {
         TransactionType.SALE, TransactionType.EMI_PAYMENT ->

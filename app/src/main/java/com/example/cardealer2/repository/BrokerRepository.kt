@@ -118,14 +118,12 @@ object BrokerRepository {
 
             // Upload ID proof PDFs
             val uploadedIdProofUrls = uploadPdfsToStorage(
-                pdfs = broker.idProof,
-                folderPath = "brokers/$brokerId/id_proofs"
+                pdfs = broker.idProof
             )
 
             // Upload broker bill PDFs
             val uploadedBrokerBillUrls = uploadPdfsToStorage(
-                pdfs = broker.brokerBill,
-                folderPath = "brokers/$brokerId/broker_bills"
+                pdfs = broker.brokerBill
             )
 
             // Create Firestore data map
@@ -156,8 +154,7 @@ object BrokerRepository {
     }
 
     private suspend fun uploadPdfsToStorage(
-        pdfs: List<String>,
-        folderPath: String
+        pdfs: List<String>
     ): List<String> {
         val downloadUrls = mutableListOf<String>()
 
@@ -175,7 +172,7 @@ object BrokerRepository {
                 }
 
                 val fileName = "document_${System.currentTimeMillis()}_$index.pdf"
-                val fileRef = storageRef.child("$folderPath/$fileName")
+                val fileRef = storageRef.child(fileName)
 
                 // Ensure correct content type for PDFs
                 val metadata = StorageMetadata.Builder()
@@ -245,14 +242,12 @@ object BrokerRepository {
         return try {
             // Upload new ID proof PDFs (existing Firebase URLs are preserved, new local URIs are uploaded)
             val uploadedIdProofUrls = uploadPdfsToStorage(
-                pdfs = broker.idProof,
-                folderPath = "brokers/${broker.brokerId}/id_proofs"
+                pdfs = broker.idProof
             )
 
             // Upload new broker bill PDFs (existing Firebase URLs are preserved, new local URIs are uploaded)
             val uploadedBrokerBillUrls = uploadPdfsToStorage(
-                pdfs = broker.brokerBill,
-                folderPath = "brokers/${broker.brokerId}/broker_bills"
+                pdfs = broker.brokerBill
             )
 
             val brokerData = hashMapOf(

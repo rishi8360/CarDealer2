@@ -11,6 +11,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,16 +33,24 @@ import com.example.cardealer2.ViewModel.PurchaseVehicleViewModel
 import com.example.cardealer2.ViewModel.VehicleFormViewModel
 import com.example.cardealer2.components.PdfPickerField
 import com.example.cardealer2.data.Brand
+import com.example.cardealer2.data.Broker
+import com.example.cardealer2.data.Customer
 import com.example.cardealer2.utility.AmountInputWithStatus
+import com.example.cardealer2.utility.BrokerSearchableDropdown
 import com.example.cardealer2.utility.ChassisNumberField
 import com.example.cardealer2.utility.ChassisValidationState
 import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utility.DatePickerField
+import com.example.cardealer2.utility.DatePickerButton
 import com.example.cardealer2.utility.FilterableDropdownField
-import com.example.cardealer2.utility.FilterableDropdownFieldWithDialog
 import com.example.cardealer2.utility.ImagePickerField
+import com.example.cardealer2.utility.CustomerSearchableDropdown
 import com.example.cardealer2.utility.YearPickerField
 import com.example.cardealer2.utility.smartPopBack
+import com.example.cardealer2.utils.TranslationManager
+import com.example.cardealer2.utils.TranslatedText
+import com.example.cardealer2.utils.TranslationDictionary
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,11 +93,13 @@ fun PurchaseVehicleScreen(
     var lastService by rememberSaveable { mutableStateOf("") }
     var previousOwners by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
+    var sellingPrice by rememberSaveable { mutableStateOf("") }
     var year by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("") }
     var nocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var rcPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var insurancePdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var vehicleOtherDocPdfs by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
 
     // Step 3: Payment Details
     var gstIncluded by rememberSaveable { mutableStateOf(false) }
@@ -100,6 +112,8 @@ fun PurchaseVehicleScreen(
     var cashAmount by rememberSaveable { mutableStateOf("") }
     var bankAmount by rememberSaveable { mutableStateOf("") }
     var creditAmount by rememberSaveable { mutableStateOf("") }
+    var note by rememberSaveable { mutableStateOf("") }
+    var purchaseDate by rememberSaveable { mutableStateOf("") }
 
     // Calculate price with GST (only if GST checkbox is checked)
     val basePrice = price.toDoubleOrNull() ?: 0.0
@@ -187,11 +201,13 @@ fun PurchaseVehicleScreen(
         lastService,
         previousOwners,
         price,
+        sellingPrice,
         year,
         type,
         nocPdfs,
         rcPdfs,
         insurancePdfs,
+        vehicleOtherDocPdfs,
         gstIncluded,
         gstPercentage,
         brokerFeeIncluded,
@@ -215,11 +231,13 @@ fun PurchaseVehicleScreen(
                 lastService.isNotBlank() ||
                 previousOwners.isNotBlank() ||
                 price.isNotBlank() ||
+                sellingPrice.isNotBlank() ||
                 year.isNotBlank() ||
                 type.isNotBlank() ||
                 nocPdfs.isNotEmpty() ||
                 rcPdfs.isNotEmpty() ||
                 insurancePdfs.isNotEmpty() ||
+                vehicleOtherDocPdfs.isNotEmpty() ||
                 gstIncluded ||
                 gstPercentage.isNotBlank() ||
                 brokerFeeIncluded ||
@@ -232,13 +250,25 @@ fun PurchaseVehicleScreen(
                 chassisNumber.isNotBlank()
     }
 
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    val titleText = remember(currentStep, isPunjabiEnabled) {
+        "${TranslationManager.translate("Purchase Vehicle - Step", isPunjabiEnabled)} $currentStep ${TranslationManager.translate("of", isPunjabiEnabled)} 3"
+    }
+
     Scaffold(
         topBar = {
             ConsistentTopAppBar(
-                title = "Purchase Vehicle - Step $currentStep of 3",
+                title = titleText,
                 navController = navController,
                 onBackClick = {
-                    if (isDirty && !uiState.isPurchasingVehicle) {
+                    if (uiState.isPurchasingVehicle) {
+                        // Block back navigation while purchase is in progress
+                        return@ConsistentTopAppBar
+                    }
+                    if (isDirty) {
                         showUnsavedDialog = true
                     } else {
                         navController.smartPopBack()
@@ -253,10 +283,17 @@ fun PurchaseVehicleScreen(
                 .padding(paddingValues)
         ) {
             // Step Indicator
+            val stepLabels = remember(isPunjabiEnabled) {
+                listOf(
+                    TranslationManager.translate("Purchase Type", isPunjabiEnabled),
+                    TranslationManager.translate("Vehicle Details", isPunjabiEnabled),
+                    TranslationManager.translate("Payment Summary", isPunjabiEnabled)
+                )
+            }
             StepIndicator(
                 currentStep = currentStep,
                 totalSteps = 3,
-                stepLabels = listOf("Purchase Type", "Vehicle Details", "Payment"),
+                stepLabels = stepLabels,
                 onStepClick = { step ->
                     // Allow navigation to any step up to current step (can go back to edit)
                     if (step <= currentStep) {
@@ -279,7 +316,7 @@ fun PurchaseVehicleScreen(
             ) {
                 when (currentStep) {
                     1 -> Step1Content(
-                        maxOrderNo = uiState.maxOrderNo,
+                        maxTransactionNo = uiState.maxTransactionNo,
                         purchaseType = purchaseType,
                         onPurchaseTypeSelected = { purchaseType = it },
                         selectedCustomerMiddleManBroker = selectedCustomerMiddleManBroker,
@@ -288,8 +325,8 @@ fun PurchaseVehicleScreen(
                         },
                         selectedOwner = selectedOwner,
                         onOwnerSelected = { selectedOwner = it },
-                        customerNames = uiState.customerNames,
-                        brokerNames = uiState.brokerNames,
+                        customers = uiState.customers,
+                        brokers = uiState.brokers,
                         onShowAddCustomerDialog = { showAddCustomerDialog = true },
                         onShowAddBrokerDialog = { showAddBrokerDialog = true },
                         onShowMiddleManDialog = { showMiddleManDialog = true },
@@ -374,6 +411,8 @@ fun PurchaseVehicleScreen(
                         onYearSelected = { year = it },
                         price = price,
                         onPriceChange = { price = it },
+                        sellingPrice = sellingPrice,
+                        onSellingPriceChange = { sellingPrice = it },
                         previousOwners = previousOwners,
                         onPreviousOwnersChange = { previousOwners = it },
                         lastService = lastService,
@@ -384,6 +423,8 @@ fun PurchaseVehicleScreen(
                         onRcPdfsChange = { rcPdfs = it },
                         insurancePdfs = insurancePdfs,
                         onInsurancePdfsChange = { insurancePdfs = it },
+                        vehicleOtherDocPdfs = vehicleOtherDocPdfs,
+                        onVehicleOtherDocPdfsChange = { vehicleOtherDocPdfs = it },
                         onBackClick = { currentStep = 1 },
                         onNextClick = {
                             // Validate step 2
@@ -444,6 +485,10 @@ fun PurchaseVehicleScreen(
                         totalBank = totalBank,
                         totalCredit = totalCredit,
                         isPurchasing = uiState.isPurchasingVehicle,
+                        note = note,
+                        onNoteChange = { note = it },
+                        purchaseDate = purchaseDate,
+                        onPurchaseDateChange = { purchaseDate = it },
                         onBackClick = { currentStep = 2 },
                         onAddClick = {
                             if (!isPaymentValid) return@Step3Content
@@ -458,6 +503,7 @@ fun PurchaseVehicleScreen(
                                 lastService = lastService,
                                 previousOwners = previousOwners,
                                 price = price,
+                                sellingPrice = sellingPrice,
                                 year = year,
                                 type = type,
                                 purchaseType = purchaseType,
@@ -466,6 +512,7 @@ fun PurchaseVehicleScreen(
                                 nocPdfs = nocPdfs,
                                 rcPdfs = rcPdfs,
                                 insurancePdfs = insurancePdfs,
+                                vehicleOtherDocPdfs = vehicleOtherDocPdfs,
                                 gstIncluded = gstIncluded,
                                 gstPercentage = gstPercentage,
                                 brokerFeeIncluded = brokerFeeIncluded,
@@ -474,7 +521,9 @@ fun PurchaseVehicleScreen(
                                 brokerFeeBank = brokerFeeBank,
                                 cashAmount = cashAmount,
                                 bankAmount = bankAmount,
-                                creditAmount = creditAmount
+                                creditAmount = creditAmount,
+                                note = note,
+                                date = purchaseDate
                             )
                         }
                     )
@@ -542,8 +591,8 @@ fun PurchaseVehicleScreen(
             AlertDialog(
                 onDismissRequest = { if (!uiState.isPurchasingVehicle) showUnsavedDialog = false },
                 icon = {},
-                title = { Text("Discard changes?") },
-                text = { Text("You have unsaved changes. Do you want to discard them and go back?") },
+                title = { TranslatedText("Discard changes?") },
+                text = { TranslatedText("You have unsaved changes. Do you want to discard them and go back?") },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -552,28 +601,66 @@ fun PurchaseVehicleScreen(
                         },
                         enabled = !uiState.isPurchasingVehicle
                     ) {
-                        Text("Discard")
+                        TranslatedText("Discard")
                     }
                 },
                 dismissButton = {
                     OutlinedButton(
                         onClick = { if (!uiState.isPurchasingVehicle) showUnsavedDialog = false }
                     ) {
-                        Text("Keep Editing")
+                        TranslatedText("Keep Editing")
                     }
                 }
             )
         }
 
         // Handle system back press with dirty check
-        BackHandler(enabled = true) {
+        BackHandler(enabled = !uiState.isPurchasingVehicle) {
             if (currentStep > 1) {
                 currentStep--
             } else {
-                if (isDirty && !uiState.isPurchasingVehicle) {
+                if (isDirty) {
                     showUnsavedDialog = true
                 } else {
                     navController.smartPopBack()
+                }
+            }
+        }
+
+        // Full-screen blocking loading dialog while purchase is in progress
+        if (uiState.isPurchasingVehicle) {
+            Dialog(
+                onDismissRequest = { /* Block dismiss while processing purchase */ },
+                properties = DialogProperties(
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                    usePlatformDefaultWidth = false
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator()
+                            TranslatedText(
+                                englishText = "Processing purchase, please wait...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -662,8 +749,14 @@ fun StepIndicator(
                     }
 
                     // Step Label
+                    val contextForStep = LocalContext.current
+                    val isPunjabiEnabledForStep by TranslationManager.isPunjabiEnabled(contextForStep)
+                        .collectAsState(initial = false)
+                    
+                    val stepLabelText = stepLabels.getOrNull(step) ?: 
+                        "${TranslationManager.translate("Step", isPunjabiEnabledForStep)} $stepNumber"
                     Text(
-                        text = stepLabels.getOrNull(step) ?: "Step $stepNumber",
+                        text = stepLabelText,
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 11.sp
                         ),
@@ -705,15 +798,15 @@ fun StepIndicator(
 
 @Composable
 fun Step1Content(
-    maxOrderNo: Int,
+    maxTransactionNo: Int,
     purchaseType: String?,
     onPurchaseTypeSelected: (String) -> Unit,
     selectedCustomerMiddleManBroker: String?,
     onCustomerMiddleManBrokerSelected: (String?) -> Unit,
     selectedOwner: String?,
     onOwnerSelected: (String?) -> Unit,
-    customerNames: List<String>,
-    brokerNames: List<String>,
+    customers: List<Customer>,
+    brokers: List<Broker>,
     onShowAddCustomerDialog: () -> Unit,
     onShowAddBrokerDialog: () -> Unit,
     onShowMiddleManDialog: () -> Unit,
@@ -731,32 +824,63 @@ fun Step1Content(
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Order Number Display
+        // Transaction Number Display
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         ) {
+            val context = LocalContext.current
+            val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                .collectAsState(initial = false)
+            
+            val transNoText = remember(maxTransactionNo, isPunjabiEnabled) {
+                "${TranslationManager.translate("TransNo", isPunjabiEnabled)} ${maxTransactionNo + 1}"
+            }
+            
             Text(
-                text = "OrdNo ${maxOrderNo + 1}",
+                text = transNoText,
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(16.dp),
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
 
-        Text(
-            text = "Purchase Type",
+        val context = LocalContext.current
+        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+            .collectAsState(initial = false)
+        
+        TranslatedText(
+            englishText = "Purchase Type",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
 
+        val purchaseTypeItems = remember(isPunjabiEnabled) {
+            listOf(
+                TranslationManager.translate("Direct", isPunjabiEnabled),
+                TranslationManager.translate("Middle Man", isPunjabiEnabled),
+                TranslationManager.translate("Broker", isPunjabiEnabled)
+            )
+        }
+        
         FilterableDropdownField(
-            label = "Select Purchase Type",
-            items = listOf("Direct", "Middle Man", "Broker"),
-            selectedItem = purchaseType,
-            onItemSelected = { onPurchaseTypeSelected(it) },
+            label = TranslationManager.translate("Select Purchase Type", isPunjabiEnabled),
+            items = purchaseTypeItems,
+            selectedItem = purchaseType?.let { 
+                if (isPunjabiEnabled) TranslationDictionary.translate(it) else it 
+            },
+            onItemSelected = { translatedItem ->
+                // Convert back to English for storage
+                val englishItem = when(translatedItem) {
+                    TranslationManager.translate("Direct", true) -> "Direct"
+                    TranslationManager.translate("Middle Man", true) -> "Middle Man"
+                    TranslationManager.translate("Broker", true) -> "Broker"
+                    else -> translatedItem
+                }
+                onPurchaseTypeSelected(englishItem)
+            },
             itemToString = { it },
             modifier = Modifier.fillMaxWidth()
         )
@@ -766,13 +890,12 @@ fun Step1Content(
                 // Direct mode - no additional field needed
             }
             "Middle Man" -> {
-                FilterableDropdownFieldWithDialog(
-                    label = "Select Middle Man",
-                    items = customerNames,
-                    selectedItem = selectedCustomerMiddleManBroker,
-                    onItemSelected = { onCustomerMiddleManBrokerSelected(it) },
+                CustomerSearchableDropdown(
+                    label = TranslationManager.translate("Select Middle Man", isPunjabiEnabled),
+                    customers = customers,
+                    selectedCustomer = customers.find { it.name == selectedCustomerMiddleManBroker },
+                    onCustomerSelected = { customer -> onCustomerMiddleManBrokerSelected(customer?.name) },
                     onShowAddDialog = { onShowMiddleManDialog() },
-                    itemToString = { it },
                     modifier = Modifier.fillMaxWidth(),
                     addSuccess = addMiddleManSuccess,
                     addedItemName = addedMiddleManName,
@@ -780,13 +903,12 @@ fun Step1Content(
                 )
             }
             "Broker" -> {
-                FilterableDropdownFieldWithDialog(
-                    label = "Select Broker",
-                    items = brokerNames,
-                    selectedItem = selectedCustomerMiddleManBroker,
-                    onItemSelected = { onCustomerMiddleManBrokerSelected(it) },
+                BrokerSearchableDropdown(
+                    label = TranslationManager.translate("Select Broker", isPunjabiEnabled),
+                    brokers = brokers,
+                    selectedBroker = brokers.find { it.name == selectedCustomerMiddleManBroker },
+                    onBrokerSelected = { broker -> onCustomerMiddleManBrokerSelected(broker?.name) },
                     onShowAddDialog = { onShowAddBrokerDialog() },
-                    itemToString = { it },
                     modifier = Modifier.fillMaxWidth(),
                     addSuccess = addBrokerSuccess,
                     addedItemName = addedBrokerName,
@@ -796,13 +918,12 @@ fun Step1Content(
         }
 
         // Owner Name field - always shown
-        FilterableDropdownFieldWithDialog(
-            label = "Select Owner (Customer)",
-            items = customerNames,
-            selectedItem = selectedOwner,
-            onItemSelected = { onOwnerSelected(it) },
+        CustomerSearchableDropdown(
+            label = TranslationManager.translate("Select Owner (Customer)", isPunjabiEnabled),
+            customers = customers,
+            selectedCustomer = customers.find { it.name == selectedOwner },
+            onCustomerSelected = { customer -> onOwnerSelected(customer?.name) },
             onShowAddDialog = { onShowAddCustomerDialog() },
-            itemToString = { it },
             modifier = Modifier.fillMaxWidth(),
             addSuccess = addCustomerSuccess,
             addedItemName = addedCustomerName,
@@ -815,7 +936,7 @@ fun Step1Content(
             onClick = onNextClick,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Next")
+            TranslatedText(englishText = "Next")
         }
     }
 }
@@ -851,6 +972,8 @@ fun Step2Content(
     onYearSelected: (String) -> Unit,
     price: String,
     onPriceChange: (String) -> Unit,
+    sellingPrice: String,
+    onSellingPriceChange: (String) -> Unit,
     previousOwners: String,
     onPreviousOwnersChange: (String) -> Unit,
     lastService: String,
@@ -861,20 +984,26 @@ fun Step2Content(
     onRcPdfsChange: (List<String>) -> Unit,
     insurancePdfs: List<String>,
     onInsurancePdfsChange: (List<String>) -> Unit,
+    vehicleOtherDocPdfs: List<String>,
+    onVehicleOtherDocPdfsChange: (List<String>) -> Unit,
     onBackClick: () -> Unit,
     onNextClick: () -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Vehicle Details",
+        val context = LocalContext.current
+        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+            .collectAsState(initial = false)
+        
+        TranslatedText(
+            englishText = "Vehicle Details",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
 
         FilterableDropdownField(
-            label = "Brand Name",
+            label = TranslationManager.translate("Brand Name", isPunjabiEnabled),
             items = brands,
             selectedItem = brandName,
             onItemSelected = { onBrandSelected(it) },
@@ -883,17 +1012,39 @@ fun Step2Content(
             modifier = Modifier.fillMaxWidth()
         )
 
+        val vehicleTypes = remember(isPunjabiEnabled) {
+            listOf(
+                TranslationManager.translate("Bike", isPunjabiEnabled),
+                TranslationManager.translate("Car", isPunjabiEnabled)
+            )
+        }
+        
         FilterableDropdownField(
-            label = "Type of Vehicle",
-            items = listOf("Bike", "Car"),
-            selectedItem = type,
-            onItemSelected = { onTypeSelected(it) },
+            label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
+            items = vehicleTypes,
+            selectedItem = type?.let { 
+                if (isPunjabiEnabled) {
+                    when(it) {
+                        "Bike" -> TranslationManager.translate("Bike", true)
+                        "Car" -> TranslationManager.translate("Car", true)
+                        else -> it
+                    }
+                } else it
+            },
+            onItemSelected = { translatedType ->
+                val englishType = when(translatedType) {
+                    TranslationManager.translate("Bike", true) -> "Bike"
+                    TranslationManager.translate("Car", true) -> "Car"
+                    else -> translatedType
+                }
+                onTypeSelected(englishType)
+            },
             itemToString = { it },
             modifier = Modifier.fillMaxWidth()
         )
 
         FilterableDropdownField(
-            label = "Name of Model",
+            label = TranslationManager.translate("Name of Model", isPunjabiEnabled),
             items = models,
             selectedItem = modelName,
             onItemSelected = { onModelSelected(it) },
@@ -903,7 +1054,7 @@ fun Step2Content(
         )
 
         FilterableDropdownField(
-            label = "Colour",
+            label = TranslationManager.translate("Color", isPunjabiEnabled),
             items = colourList,
             selectedItem = colour,
             onItemSelected = { onColourSelected(it) },
@@ -921,17 +1072,45 @@ fun Step2Content(
             modifier = Modifier.fillMaxWidth()
         )
 
+        val conditionItems = remember(isPunjabiEnabled) {
+            listOf(
+                TranslationManager.translate("Excellent", isPunjabiEnabled),
+                TranslationManager.translate("Good", isPunjabiEnabled),
+                TranslationManager.translate("Fair", isPunjabiEnabled),
+                TranslationManager.translate("Poor", isPunjabiEnabled)
+            )
+        }
+        
         FilterableDropdownField(
-            label = "Condition",
-            items = listOf("Excellent", "Good", "Fair", "Poor"),
-            selectedItem = condition,
-            onItemSelected = { onConditionSelected(it) },
+            label = TranslationManager.translate("Condition", isPunjabiEnabled),
+            items = conditionItems,
+            selectedItem = condition?.let {
+                if (isPunjabiEnabled) {
+                    when(it) {
+                        "Excellent" -> TranslationManager.translate("Excellent", true)
+                        "Good" -> TranslationManager.translate("Good", true)
+                        "Fair" -> TranslationManager.translate("Fair", true)
+                        "Poor" -> TranslationManager.translate("Poor", true)
+                        else -> it
+                    }
+                } else it
+            },
+            onItemSelected = { translatedCondition ->
+                val englishCondition = when(translatedCondition) {
+                    TranslationManager.translate("Excellent", true) -> "Excellent"
+                    TranslationManager.translate("Good", true) -> "Good"
+                    TranslationManager.translate("Fair", true) -> "Fair"
+                    TranslationManager.translate("Poor", true) -> "Poor"
+                    else -> translatedCondition
+                }
+                onConditionSelected(englishCondition)
+            },
             itemToString = { it },
             modifier = Modifier.fillMaxWidth()
         )
 
         ImagePickerField(
-            label = "Vehicle Images",
+            label = TranslationManager.translate("Vehicle Images", isPunjabiEnabled),
             images = images,
             onImagesChanged = onImagesChanged,
             modifier = Modifier.fillMaxWidth()
@@ -944,12 +1123,12 @@ fun Step2Content(
             OutlinedTextField(
                 value = kms,
                 onValueChange = onKmsChange,
-                label = { Text("KMs *") },
+                label = { TranslatedText(englishText = "KMs *") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             YearPickerField(
-                label = "Year *",
+                label = TranslationManager.translate("Year *", isPunjabiEnabled),
                 selectedYear = year,
                 onYearSelected = onYearSelected,
                 modifier = Modifier.weight(1f)
@@ -963,21 +1142,29 @@ fun Step2Content(
             OutlinedTextField(
                 value = price,
                 onValueChange = onPriceChange,
-                label = { Text("Price *") },
+                label = { TranslatedText(englishText = "Purchase Price *") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             OutlinedTextField(
                 value = previousOwners,
                 onValueChange = onPreviousOwnersChange,
-                label = { Text("Previous Owners") },
+                label = { TranslatedText(englishText = "Previous Owners") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
         }
+        
+        OutlinedTextField(
+            value = sellingPrice,
+            onValueChange = onSellingPriceChange,
+            label = { TranslatedText(englishText = "Selling Price") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
 
         DatePickerField(
-            label = "Last Service",
+            label = TranslationManager.translate("Last Service", isPunjabiEnabled),
             selectedDate = lastService,
             onDateSelected = onLastServiceSelected,
             modifier = Modifier.fillMaxWidth()
@@ -985,30 +1172,38 @@ fun Step2Content(
 
         HorizontalDivider()
 
-        Text(
-            text = "Document Details",
+        
+        TranslatedText(
+            englishText = "Document Details",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
 
         PdfPickerField(
-            label = "NOC PDFs",
+            label = TranslationManager.translate("NOC PDFs", isPunjabiEnabled),
             pdfUrls = nocPdfs,
             onPdfChange = onNocPdfsChange,
             modifier = Modifier.fillMaxWidth()
         )
 
         PdfPickerField(
-            label = "RC PDFs",
+            label = TranslationManager.translate("RC PDFs", isPunjabiEnabled),
             pdfUrls = rcPdfs,
             onPdfChange = onRcPdfsChange,
             modifier = Modifier.fillMaxWidth()
         )
 
         PdfPickerField(
-            label = "Insurance PDFs",
+            label = TranslationManager.translate("Insurance PDFs", isPunjabiEnabled),
             pdfUrls = insurancePdfs,
             onPdfChange = onInsurancePdfsChange,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        PdfPickerField(
+            label = TranslationManager.translate("Other Vehicle Documents", isPunjabiEnabled),
+            pdfUrls = vehicleOtherDocPdfs,
+            onPdfChange = onVehicleOtherDocPdfsChange,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -1018,17 +1213,21 @@ fun Step2Content(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val context = LocalContext.current
+            val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                .collectAsState(initial = false)
+            
             OutlinedButton(
                 onClick = onBackClick,
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Back")
+                TranslatedText(englishText = "Back")
             }
             Button(
                 onClick = onNextClick,
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Next")
+                TranslatedText(englishText = "Next")
             }
         }
     }
@@ -1068,14 +1267,22 @@ fun Step3Content(
     totalBank: Double,
     totalCredit: Double,
     isPurchasing: Boolean,
+    note: String,
+    onNoteChange: (String) -> Unit,
+    purchaseDate: String,
+    onPurchaseDateChange: (String) -> Unit,
     onBackClick: () -> Unit,
     onAddClick: () -> Unit
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Payment Summary",
+        val context = LocalContext.current
+        val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+            .collectAsState(initial = false)
+        
+        TranslatedText(
+            englishText = "Payment Summary",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
@@ -1091,17 +1298,25 @@ fun Step3Content(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Vehicle Details",
+                val context = LocalContext.current
+                val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                    .collectAsState(initial = false)
+                
+                TranslatedText(
+                    englishText = "Vehicle Details",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text("Brand: $brandName")
-                Text("Model: $modelName")
-                Text("Chassis: $chassisNumber")
+                val brandLabel = "${TranslationManager.translate("Brand ID", isPunjabiEnabled)}: $brandName"
+                Text(brandLabel)
+                val modelLabel = "${TranslationManager.translate("Model Name", isPunjabiEnabled)}: $modelName"
+                Text(modelLabel)
+                val chassisLabel = "${TranslationManager.translate("Chassis Number", isPunjabiEnabled)}: $chassisNumber"
+                Text(chassisLabel)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                val basePriceLabel = "${TranslationManager.translate("Base Price:", isPunjabiEnabled)} ₹${String.format("%.2f", basePrice)}"
                 Text(
-                    text = "Base Price: ₹${String.format("%.2f", basePrice)}",
+                    text = basePriceLabel,
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -1116,8 +1331,12 @@ fun Step3Content(
                 checked = gstIncluded,
                 onCheckedChange = onGstIncludedChange
             )
-            Text(
-                text = "Apply GST",
+            val context = LocalContext.current
+            val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                .collectAsState(initial = false)
+            
+            TranslatedText(
+                englishText = "Apply GST",
                 modifier = Modifier.padding(start = 8.dp)
             )
         }
@@ -1126,7 +1345,7 @@ fun Step3Content(
             OutlinedTextField(
                 value = gstPercentage,
                 onValueChange = onGstPercentageChange,
-                label = { Text("GST Percentage (%)") },
+                label = { TranslatedText(englishText = "GST Percentage (%)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 trailingIcon = { Text("%", modifier = Modifier.padding(end = 8.dp)) }
@@ -1144,24 +1363,31 @@ fun Step3Content(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "Vehicle Price Breakdown",
+                val context = LocalContext.current
+                val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                    .collectAsState(initial = false)
+                
+                TranslatedText(
+                    englishText = "Vehicle Price Breakdown",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
+                val basePriceText = "${TranslationManager.translate("Base Price:", isPunjabiEnabled)} ₹${String.format("%.2f", basePrice)}"
                 Text(
-                    text = "Base Price: ₹${String.format("%.2f", basePrice)}",
+                    text = basePriceText,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 if (gstIncluded && gstAmount > 0) {
+                    val gstText = "${TranslationManager.translate("GST", isPunjabiEnabled)} (${gstPercentage}%): ₹${String.format("%.2f", gstAmount)}"
                     Text(
-                        text = "GST (${gstPercentage}%): ₹${String.format("%.2f", gstAmount)}",
+                        text = gstText,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                val vehicleTotalText = "${TranslationManager.translate("Vehicle Total (Grand Total):", isPunjabiEnabled)} ₹${String.format("%.2f", finalPrice)}"
                 Text(
-                    text = "Vehicle Total (Grand Total): ₹${String.format("%.2f", finalPrice)}",
+                    text = vehicleTotalText,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -1172,8 +1398,14 @@ fun Step3Content(
 
         // Broker/Middle Man Fee Section
         if (purchaseType == "Broker" || purchaseType == "Middle Man") {
+            val feeTitle = if (purchaseType == "Broker") {
+                TranslationManager.translate("Broker Fee", isPunjabiEnabled)
+            } else {
+                TranslationManager.translate("Middle Man Fee", isPunjabiEnabled)
+            }
+            
             Text(
-                text = if (purchaseType == "Broker") "Broker Fee" else "Middle Man Fee",
+                text = feeTitle,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -1186,23 +1418,40 @@ fun Step3Content(
                     checked = brokerFeeIncluded,
                     onCheckedChange = onBrokerFeeIncludedChange
                 )
+                val includeFeeText = if (purchaseType == "Broker") {
+                    "${TranslationManager.translate("Include", isPunjabiEnabled)} ${TranslationManager.translate("Broker", isPunjabiEnabled)} ${TranslationManager.translate("Fee", isPunjabiEnabled)}"
+                } else {
+                    "${TranslationManager.translate("Include", isPunjabiEnabled)} ${TranslationManager.translate("Middle Man", isPunjabiEnabled)} ${TranslationManager.translate("Fee", isPunjabiEnabled)}"
+                }
                 Text(
-                    text = "Include ${if (purchaseType == "Broker") "Broker" else "Middle Man"} Fee",
+                    text = includeFeeText,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
 
             if (brokerFeeIncluded) {
+                val feeAmountLabel = if (purchaseType == "Broker") {
+                    "${TranslationManager.translate("Broker", isPunjabiEnabled)} ${TranslationManager.translate("Fee Amount", isPunjabiEnabled)}"
+                } else {
+                    "${TranslationManager.translate("Middle Man", isPunjabiEnabled)} ${TranslationManager.translate("Fee Amount", isPunjabiEnabled)}"
+                }
+                
                 OutlinedTextField(
                     value = brokerFeeAmount,
                     onValueChange = onBrokerFeeAmountChange,
-                    label = { Text("${if (purchaseType == "Broker") "Broker" else "Middle Man"} Fee Amount") },
+                    label = { Text(feeAmountLabel) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
+                val feePaymentText = if (purchaseType == "Broker") {
+                    "${TranslationManager.translate("Broker", isPunjabiEnabled)} ${TranslationManager.translate("Fee Payment", isPunjabiEnabled)}"
+                } else {
+                    "${TranslationManager.translate("Middle Man", isPunjabiEnabled)} ${TranslationManager.translate("Fee Payment", isPunjabiEnabled)}"
+                }
+                
                 Text(
-                    text = "${if (purchaseType == "Broker") "Broker" else "Middle Man"} Fee Payment",
+                    text = feePaymentText,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp)
@@ -1222,7 +1471,7 @@ fun Step3Content(
                             val credit = brokerFee - (cash + bank)
                             // Credit is auto-calculated, no need to update here
                         },
-                        label = { Text("Cash") },
+                        label = { TranslatedText(englishText = "Cash") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -1236,7 +1485,7 @@ fun Step3Content(
                             val credit = brokerFee - (cash + bank)
                             // Credit is auto-calculated, no need to update here
                         },
-                        label = { Text("Bank") },
+                        label = { TranslatedText(englishText = "Bank") },
                         modifier = Modifier.weight(1f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
@@ -1245,7 +1494,7 @@ fun Step3Content(
                 OutlinedTextField(
                     value = String.format("%.2f", brokerFeeCredit),
                     onValueChange = { }, // Read-only, auto-calculated
-                    label = { Text("Credit (Auto)") },
+                    label = { TranslatedText(englishText = "Credit (Auto)") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = false,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -1259,8 +1508,8 @@ fun Step3Content(
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         }
 
-        Text(
-            text = "Vehicle Payment Methods",
+        TranslatedText(
+            englishText = "Vehicle Payment Methods",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
@@ -1272,14 +1521,14 @@ fun Step3Content(
             OutlinedTextField(
                 value = cashAmount,
                 onValueChange = onCashAmountChange,
-                label = { Text("Cash Amount") },
+                label = { TranslatedText(englishText = "Cash Amount") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
             OutlinedTextField(
                 value = bankAmount,
                 onValueChange = onBankAmountChange,
-                label = { Text("Bank Amount") },
+                label = { TranslatedText(englishText = "Bank Amount") },
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
@@ -1288,7 +1537,7 @@ fun Step3Content(
         OutlinedTextField(
             value = creditAmount,
             onValueChange = { }, // Read-only, auto-calculated
-            label = { Text("Credit Amount (Auto)") },
+            label = { TranslatedText(englishText = "Credit Amount (Auto)") },
             modifier = Modifier.fillMaxWidth(),
             enabled = false,
             colors = OutlinedTextFieldDefaults.colors(
@@ -1300,13 +1549,35 @@ fun Step3Content(
 
         // Payment Validation Error
         if (!isPaymentValid) {
+            val errorText = "${TranslationManager.translate("Cash + Bank amount cannot exceed Vehicle Grand Total", isPunjabiEnabled)} (₹${String.format("%.2f", finalPrice)})"
             Text(
-                text = "⚠️ Cash + Bank amount cannot exceed Vehicle Grand Total (₹${String.format("%.2f", finalPrice)})",
+                text = "⚠️ $errorText",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // Date Picker
+        DatePickerButton(
+            selectedDate = purchaseDate,
+            onDateSelected = onPurchaseDateChange,
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Note Field
+        OutlinedTextField(
+            value = note,
+            onValueChange = onNoteChange,
+            label = { TranslatedText(englishText = "Note (Optional)") },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            leadingIcon = { Icon(Icons.Outlined.Description, null) }
+        )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -1321,38 +1592,52 @@ fun Step3Content(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "Total Summary",
+                val context = LocalContext.current
+                val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+                    .collectAsState(initial = false)
+                
+                TranslatedText(
+                    englishText = "Total Summary",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
+                val vehicleTotalText = "${TranslationManager.translate("Vehicle Total:", isPunjabiEnabled)} ₹${String.format("%.2f", finalPrice)}"
                 Text(
-                    text = "Vehicle Total: ₹${String.format("%.2f", finalPrice)}",
+                    text = vehicleTotalText,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 if (brokerFeeIncluded && brokerFee > 0) {
+                    val feeText = if (purchaseType == "Broker") {
+                        "${TranslationManager.translate("Broker", isPunjabiEnabled)} ${TranslationManager.translate("Fee", isPunjabiEnabled)}: ₹${String.format("%.2f", brokerFee)}"
+                    } else {
+                        "${TranslationManager.translate("Middle Man", isPunjabiEnabled)} ${TranslationManager.translate("Fee", isPunjabiEnabled)}: ₹${String.format("%.2f", brokerFee)}"
+                    }
                     Text(
-                        text = "${if (purchaseType == "Broker") "Broker" else "Middle Man"} Fee: ₹${String.format("%.2f", brokerFee)}",
+                        text = feeText,
                         color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                val grandTotalText = "${TranslationManager.translate("Grand Total:", isPunjabiEnabled)} ₹${String.format("%.2f", totalGrandTotal)}"
                 Text(
-                    text = "Grand Total: ₹${String.format("%.2f", totalGrandTotal)}",
+                    text = grandTotalText,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                val totalCashText = "${TranslationManager.translate("Total Cash:", isPunjabiEnabled)} ₹${String.format("%.2f", totalCash)}"
                 Text(
-                    text = "Total Cash: ₹${String.format("%.2f", totalCash)}",
+                    text = totalCashText,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
+                val totalBankText = "${TranslationManager.translate("Total Bank:", isPunjabiEnabled)} ₹${String.format("%.2f", totalBank)}"
                 Text(
-                    text = "Total Bank: ₹${String.format("%.2f", totalBank)}",
+                    text = totalBankText,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
+                val totalCreditText = "${TranslationManager.translate("Total Credit:", isPunjabiEnabled)} ₹${String.format("%.2f", totalCredit)}"
                 Text(
-                    text = "Total Credit: ₹${String.format("%.2f", totalCredit)}",
+                    text = totalCreditText,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
@@ -1369,7 +1654,7 @@ fun Step3Content(
                 modifier = Modifier.weight(1f),
                 enabled = !isPurchasing
             ) {
-                Text("Back")
+                TranslatedText(englishText = "Back")
             }
             Button(
                 onClick = onAddClick,
@@ -1379,7 +1664,7 @@ fun Step3Content(
                 if (isPurchasing) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("Add Vehicle")
+                    TranslatedText(englishText = "Add Vehicle")
                 }
             }
         }
