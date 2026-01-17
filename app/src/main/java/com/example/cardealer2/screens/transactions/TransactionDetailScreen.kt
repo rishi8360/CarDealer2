@@ -26,8 +26,6 @@ import com.example.cardealer2.utility.ConsistentTopAppBar
 import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
 import com.example.cardealer2.utils.TransactionBillGenerator
-import com.example.cardealer2.utils.PdfGenerator
-import com.example.cardealer2.screens.catalog.sharePdf
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
@@ -49,6 +47,8 @@ fun TransactionDetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
     var isGeneratingBill by remember { mutableStateOf(false) }
+    var showPrintBillDialog by remember { mutableStateOf(false) }
+    var billRelatedData by remember { mutableStateOf<TransactionBillGenerator.BillRelatedData?>(null) }
     
     val scope = rememberCoroutineScope()
     
@@ -181,49 +181,18 @@ fun TransactionDetailScreen(
                             GenerateBillButton(
                                 transaction = transaction!!,
                                 onClick = {
-                                    isGeneratingBill = true
-                                    errorMessage = null
+                                    // Fetch related data before showing dialog
                                     scope.launch {
+                                        isGeneratingBill = true
                                         try {
-                                            // Fetch related data
                                             val relatedDataResult = withContext(Dispatchers.IO) {
-                                                viewModel.fetchBillRelatedData(transaction!!)
+                                                viewModel.fetchBillRelatedData(context, transaction!!)
                                             }
-                                            
                                             relatedDataResult.fold(
                                                 onSuccess = { relatedData ->
-                                                    // Generate HTML
-                                                    val html = TransactionBillGenerator.generateBillHtml(
-                                                        transaction = transaction!!,
-                                                        relatedData = relatedData,
-                                                        isPunjabiEnabled = isPunjabiEnabled
-                                                    )
-                                                    
-                                                    // Generate PDF
-                                                    val pdfResult = withContext(Dispatchers.Main) {
-                                                        PdfGenerator.generatePdfFromHtml(
-                                                            context = context,
-                                                            htmlContent = html,
-                                                            fileName = "transaction_bill_${transaction!!.transactionNumber ?: transaction!!.transactionId.take(8)}_${System.currentTimeMillis()}"
-                                                        )
-                                                    }
-                                                    
-                                                    pdfResult.fold(
-                                                        onSuccess = { pdfFile ->
-                                                            // Share PDF
-                                                            withContext(Dispatchers.Main) {
-                                                                sharePdf(context, pdfFile.absolutePath)
-                                                                isGeneratingBill = false
-                                                            }
-                                                        },
-                                                        onFailure = { error ->
-                                                            errorMessage = TranslationManager.translate(
-                                                                "Failed to generate PDF: ${error.message}",
-                                                                isPunjabiEnabled
-                                                            )
-                                                            isGeneratingBill = false
-                                                        }
-                                                    )
+                                                    billRelatedData = relatedData
+                                                    isGeneratingBill = false
+                                                    showPrintBillDialog = true
                                                 },
                                                 onFailure = { error ->
                                                     errorMessage = TranslationManager.translate(
@@ -286,6 +255,15 @@ fun TransactionDetailScreen(
             },
             currencyFormatter = currencyFormatter,
             isPunjabiEnabled = isPunjabiEnabled
+        )
+    }
+    
+    // Print Bill Dialog
+    if (showPrintBillDialog && transaction != null && billRelatedData != null) {
+        PrintBillDialog(
+            transaction = transaction!!,
+            relatedData = billRelatedData!!,
+            onDismiss = { showPrintBillDialog = false }
         )
     }
 }

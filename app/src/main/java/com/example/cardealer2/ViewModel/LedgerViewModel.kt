@@ -14,8 +14,11 @@ import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Broker
 import com.example.cardealer2.data.EmiDetails
 import com.example.cardealer2.data.Purchase
+import com.example.cardealer2.data.Company
+import com.example.cardealer2.data.AppPreferences
 import com.example.cardealer2.utils.TransactionBillGenerator
 import com.google.firebase.firestore.DocumentReference
+import android.content.Context
 import com.google.firebase.firestore.firestore
 import com.google.firebase.Firebase
 import kotlinx.coroutines.tasks.await
@@ -516,7 +519,7 @@ class LedgerViewModel : ViewModel() {
     /**
      * Fetch all related data for generating a transaction bill
      */
-    suspend fun fetchBillRelatedData(transaction: PersonTransaction): Result<TransactionBillGenerator.BillRelatedData> {
+    suspend fun fetchBillRelatedData(context: Context, transaction: PersonTransaction): Result<TransactionBillGenerator.BillRelatedData> {
         return try {
             var personDetails: TransactionBillGenerator.PersonBillDetails? = null
             var purchaseDetails: Purchase? = null
@@ -628,13 +631,21 @@ class LedgerViewModel : ViewModel() {
                 }
             }
             
+            // Fetch company details
+            val companyDetails = try {
+                AppPreferences.getCompanyDataSync(context)
+            } catch (e: Exception) {
+                Company() // Default empty company
+            }
+            
             Result.success(
                 TransactionBillGenerator.BillRelatedData(
                     personDetails = personDetails,
                     purchaseDetails = purchaseDetails,
                     saleDetails = saleDetails,
                     emiDetails = emiDetails,
-                    productDetails = productDetails
+                    productDetails = productDetails,
+                    companyDetails = companyDetails
                 )
             )
         } catch (e: Exception) {

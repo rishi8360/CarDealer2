@@ -10,10 +10,11 @@ import java.util.*
  */
 object TransactionBillGenerator {
     
-    private val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    private val currencyFormatter = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"))
     private val dateInputFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val dateDisplayFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
     private val dateTimeFormatter = SimpleDateFormat("dd MMM yyyy 'at' h:mm a", Locale.getDefault())
+    private val invoiceDateFormat = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
     
     /**
      * Data class to hold all related information for a bill
@@ -23,7 +24,8 @@ object TransactionBillGenerator {
         val purchaseDetails: Purchase? = null,
         val saleDetails: VehicleSale? = null,
         val emiDetails: EmiDetails? = null,
-        val productDetails: ProductBillDetails? = null
+        val productDetails: ProductBillDetails? = null,
+        val companyDetails: Company? = null
     )
     
     data class PersonBillDetails(
@@ -58,484 +60,415 @@ object TransactionBillGenerator {
     }
     
     /**
-     * Generate HTML bill content from transaction and related data
+     * Generate HTML bill for a transaction
      */
+    fun generateBillHTML(
+        transaction: PersonTransaction,
+        relatedData: BillRelatedData,
+        invoiceNumber: String,
+        invoiceDate: Long = System.currentTimeMillis(),
+        buyerName: String = "",
+        buyerAddress: String = "",
+        buyerGstin: String = ""
+    ): String {
+        val company = relatedData.companyDetails
+        val companyName = company?.name ?: "Car Dealer"
+        val companyGstin = company?.gstin ?: ""
+        val companyAddress = company?.phone ?: "" // Using phone field for address as per Company model
+        
+        // Calculate amounts based on transaction type
+        val baseAmount = transaction.amount
+        val discount = 0.0 // Transactions don't have discount in current model
+        val afterDiscount = baseAmount - discount
+        
+        // GST calculation - if purchase has GST, use it; otherwise 0
+        val gstAmount = relatedData.purchaseDetails?.gstAmount ?: 0.0
+        val gstPercentage = if (gstAmount > 0 && afterDiscount > 0) {
+            (gstAmount / afterDiscount) * 100.0
+        } else {
+            0.0
+        }
+        
+        val cgstAmount = gstAmount / 2.0
+        val sgstAmount = gstAmount / 2.0
+        
+        val grandTotal = afterDiscount + gstAmount
+        val roundedTotal = Math.round(grandTotal).toLong()
+        val roundedOff = roundedTotal - grandTotal
+        
+        val amountInWords = convertNumberToWords(roundedTotal.toDouble())
+        
+        // Get service description based on transaction type
+        val serviceDescription = when (transaction.type) {
+            TransactionType.PURCHASE -> "Vehicle Purchase"
+            TransactionType.SALE -> "Vehicle Sale"
+            TransactionType.EMI_PAYMENT -> "EMI Payment"
+            TransactionType.BROKER_FEE -> "Broker Fee"
+            else -> "Transaction"
+        }
+        
+        // Get product details for description
+        val productInfo = relatedData.productDetails
+        val productDescription = buildString {
+            append(serviceDescription)
+            productInfo?.let {
+                if (it.chassisNumber.isNotBlank()) {
+                    append(" - Chassis: ${it.chassisNumber}")
+                }
+                if (it.type != null) {
+                    append(" - Type: ${it.type}")
+                }
+                if (it.year != null) {
+                    append(" - Year: ${it.year}")
+                }
+            }
+        }
+        
+        return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* {
+margin: 0;
+padding: 0;
+box-sizing: border-box;
+}
+body {
+font-family: Arial, sans-serif;
+font-size: 12px;
+padding: 20px;
+background: white;
+}
+.header {
+text-align: center;
+margin-bottom: 20px;
+}
+.header h1 {
+font-size: 24px;
+font-weight: bold;
+margin-bottom: 10px;
+}
+.original-copy {
+text-align: right;
+font-weight: bold;
+margin-bottom: 10px;
+}
+.company-info {
+margin-bottom: 20px;
+}
+.company-info h2 {
+font-size: 18px;
+margin-bottom: 10px;
+}
+.info-row {
+margin: 5px 0;
+}
+.two-columns {
+display: flex;
+justify-content: space-between;
+margin-bottom: 20px;
+}
+.column {
+width: 48%;
+}
+.invoice-details {
+margin-bottom: 20px;
+}
+.invoice-details table {
+width: 100%;
+border-collapse: collapse;
+}
+.invoice-details td {
+padding: 5px;
+border: 1px solid #ddd;
+}
+.invoice-details td:first-child {
+font-weight: bold;
+width: 40%;
+}
+.service-table {
+width: 100%;
+border-collapse: collapse;
+margin-bottom: 20px;
+}
+.service-table th,
+.service-table td {
+border: 1px solid #000;
+padding: 8px;
+text-align: left;
+}
+.service-table th {
+background-color: #f0f0f0;
+font-weight: bold;
+text-align: center;
+}
+.service-table td {
+text-align: right;
+}
+.service-table td:first-child,
+.service-table td:nth-child(2) {
+text-align: left;
+}
+.summary {
+margin-bottom: 20px;
+}
+.summary table {
+width: 100%;
+border-collapse: collapse;
+}
+.summary td {
+padding: 5px;
+border: 1px solid #ddd;
+}
+.summary td:first-child {
+font-weight: bold;
+width: 70%;
+}
+.summary td:last-child {
+text-align: right;
+}
+.tax-summary {
+margin-bottom: 20px;
+}
+.tax-summary table {
+width: 100%;
+border-collapse: collapse;
+}
+.tax-summary th,
+.tax-summary td {
+border: 1px solid #000;
+padding: 8px;
+text-align: center;
+}
+.tax-summary th {
+background-color: #f0f0f0;
+font-weight: bold;
+}
+.amount-in-words {
+margin: 20px 0;
+padding: 10px;
+border: 1px solid #000;
+font-weight: bold;
+}
+@media print {
+body {
+padding: 10px;
+}
+}
+</style>
+</head>
+<body>
+<div class="original-copy">ORIGINAL COPY</div>
+<div class="header">
+<h1>TAX INVOICE</h1>
+</div>
+<div class="company-info">
+<h2>$companyName</h2>
+${if (companyAddress.isNotBlank()) "<div class=\"info-row\">$companyAddress</div>" else ""}
+${if (companyGstin.isNotBlank()) "<div class=\"info-row\">GSTIN: $companyGstin</div>" else ""}
+</div>
+<div class="two-columns">
+<div class="column">
+<h3>Party Details (Buyer):</h3>
+<div class="info-row"><strong>Name:</strong> ${if (buyerName.isNotBlank()) buyerName else (relatedData.personDetails?.name ?: transaction.personName)}</div>
+${if (buyerAddress.isNotBlank() || relatedData.personDetails?.address?.isNotBlank() == true) {
+    "<div class=\"info-row\"><strong>Address:</strong> ${buyerAddress.ifBlank { relatedData.personDetails?.address ?: "" }}</div>"
+} else ""}
+${if (buyerGstin.isNotBlank()) "<div class=\"info-row\"><strong>GSTIN / UIN:</strong> $buyerGstin</div>" else ""}
+</div>
+<div class="column">
+<div class="invoice-details">
+<table>
+<tr>
+<td>Invoice No.:</td>
+<td>$invoiceNumber</td>
+</tr>
+<tr>
+<td>Dated:</td>
+<td>${invoiceDateFormat.format(Date(invoiceDate))}</td>
+</tr>
+<tr>
+<td>Place of Supply:</td>
+<td>Haryana (06)</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<table class="service-table">
+<thead>
+<tr>
+<th>S.N.</th>
+<th>Description of Service</th>
+<th>Amount (₹)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>$productDescription</td>
+<td>${formatCurrencyAmount(baseAmount)}</td>
+</tr>
+</tbody>
+</table>
+<div class="summary">
+<table>
+<tr>
+<td>Subtotal:</td>
+<td>${formatCurrencyAmount(baseAmount)}</td>
+</tr>
+${if (discount > 0) {
+    "<tr><td>Less: Discount:</td><td>-${formatCurrencyAmount(discount)}</td></tr>"
+} else ""}
+<tr>
+<td>Taxable Amount:</td>
+<td>${formatCurrencyAmount(afterDiscount)}</td>
+</tr>
+${if (gstPercentage > 0) {
+    "<tr><td>Add: GST (${String.format("%.2f", gstPercentage)}%):</td><td>${formatCurrencyAmount(gstAmount)}</td></tr>"
+} else if (gstAmount > 0) {
+    "<tr><td>Add: GST:</td><td>${formatCurrencyAmount(gstAmount)}</td></tr>"
+} else ""}
+${if (Math.abs(roundedOff) > 0.01) {
+    "<tr><td>Add: Rounded Off (${if (roundedOff > 0) "+" else ""}):</td><td>${formatCurrencyAmount(roundedOff)}</td></tr>"
+} else ""}
+<tr style="font-weight: bold; font-size: 14px;">
+<td>Grand Total:</td>
+<td>${formatCurrencyAmount(roundedTotal.toDouble())}</td>
+</tr>
+</table>
+</div>
+${if (gstPercentage > 0 || gstAmount > 0) {
+    """
+<div class="tax-summary">
+<table>
+<thead>
+<tr>
+<th>Taxable Value</th>
+<th>CGST</th>
+<th>SGST</th>
+<th>Total GST</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>${formatCurrencyAmount(afterDiscount)}</td>
+<td>${formatCurrencyAmount(cgstAmount)}</td>
+<td>${formatCurrencyAmount(sgstAmount)}</td>
+<td>${formatCurrencyAmount(gstAmount)}</td>
+</tr>
+</tbody>
+</table>
+</div>
+"""
+} else ""}
+<div class="amount-in-words">
+<strong>Amount in Words:</strong> Rupees $amountInWords Only
+</div>
+<div style="margin-top: 60px; text-align: center; padding: 30px 20px;">
+<h2 style="color: #1976d2; margin-bottom: 10px; font-size: 20px;">Thank You!</h2>
+<p style="font-size: 14px; color: #666; margin-top: 10px;">
+This is an E-Bill generated electronically and does not require a physical signature.
+</p>
+</div>
+</body>
+</html>
+""".trimIndent()
+    }
+    
+    /**
+     * Format currency amount without currency symbol for HTML display
+     */
+    private fun formatCurrencyAmount(amount: Double): String {
+        return currencyFormatter.format(amount).replace("₹", "").trim()
+    }
+    
+    /**
+     * Convert number to words (Indian numbering system)
+     */
+    private fun convertNumberToWords(number: Double): String {
+        val rupees = number.toLong()
+        val paise = ((number - rupees) * 100).toInt()
+        val rupeesInWords = numberToWords(rupees)
+        val paiseInWords = if (paise > 0) {
+            " and ${numberToWords(paise.toLong())} Paise"
+        } else {
+            ""
+        }
+        return "$rupeesInWords$paiseInWords"
+    }
+    
+    /**
+     * Convert number to words
+     */
+    private fun numberToWords(number: Long): String {
+        if (number == 0L) return "Zero"
+        
+        val ones = arrayOf("", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+            "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen")
+        val tens = arrayOf("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+        
+        fun convertHundreds(n: Long): String {
+            var num = n
+            var result = ""
+            if (num >= 100) {
+                result += ones[(num / 100).toInt()] + " Hundred "
+                num %= 100
+            }
+            if (num >= 20) {
+                result += tens[(num / 10).toInt()] + " "
+                num %= 10
+            }
+            if (num > 0) {
+                result += ones[num.toInt()] + " "
+            }
+            return result.trim()
+        }
+        
+        var num = number
+        var result = ""
+        
+        if (num >= 10000000) {
+            result += convertHundreds(num / 10000000) + " Crore "
+            num %= 10000000
+        }
+        if (num >= 100000) {
+            result += convertHundreds(num / 100000) + " Lakh "
+            num %= 100000
+        }
+        if (num >= 1000) {
+            result += convertHundreds(num / 1000) + " Thousand "
+            num %= 1000
+        }
+        if (num > 0) {
+            result += convertHundreds(num)
+        }
+        
+        return result.trim().replace("  ", " ")
+    }
+    
+    // Legacy function for backward compatibility
     fun generateBillHtml(
         transaction: PersonTransaction,
         relatedData: BillRelatedData,
-        isPunjabiEnabled: Boolean,
-        companyDetails: CompanyDetails = getDefaultCompanyDetails()
+        isPunjabiEnabled: Boolean
     ): String {
-        val transactionTypeLabel = getTransactionTypeLabel(transaction.type, isPunjabiEnabled)
-        val formattedDate = formatDate(transaction.date)
-        val formattedTime = formatTime(transaction.createdAt)
+        // Generate invoice number
+        val dateFormat = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
+        val dateStr = dateFormat.format(Date())
+        val invoiceNumber = "CARDEALER/${transaction.transactionId.take(8)}/$dateStr"
         
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                ${getBillCss()}
-            </style>
-        </head>
-        <body>
-            <div class="bill-container">
-                <!-- Header Section -->
-                <div class="header">
-                    <h1 class="company-name">${companyDetails.name}</h1>
-                    <p class="company-address">${companyDetails.address}</p>
-                    <p class="company-contact">${companyDetails.phone} | ${companyDetails.email}</p>
-                </div>
-                
-                <hr class="divider">
-                
-                <!-- Bill Title -->
-                <div class="bill-title">
-                    <h2>${transactionTypeLabel} ${TranslationManager.translate("Bill", isPunjabiEnabled)}</h2>
-                    <p class="bill-number">${TranslationManager.translate("Bill No", isPunjabiEnabled)}: ${transaction.transactionNumber ?: transaction.transactionId.take(8).uppercase()}</p>
-                    <p class="bill-date">${TranslationManager.translate("Date", isPunjabiEnabled)}: $formattedDate</p>
-                    <p class="bill-time">${TranslationManager.translate("Time", isPunjabiEnabled)}: $formattedTime</p>
-                </div>
-                
-                <!-- Transaction Details -->
-                <div class="section">
-                    <h3>${TranslationManager.translate("Transaction Details", isPunjabiEnabled)}</h3>
-                    <table class="details-table">
-                        <tr>
-                            <td>${TranslationManager.translate("Transaction ID", isPunjabiEnabled)}</td>
-                            <td>${transaction.transactionId}</td>
-                        </tr>
-                        <tr>
-                            <td>${TranslationManager.translate("Type", isPunjabiEnabled)}</td>
-                            <td>${transactionTypeLabel}</td>
-                        </tr>
-                        <tr>
-                            <td>${TranslationManager.translate("Status", isPunjabiEnabled)}</td>
-                            <td>${translateStatus(transaction.status, isPunjabiEnabled)}</td>
-                        </tr>
-                    </table>
-                </div>
-                
-                <!-- Person Details -->
-                ${relatedData.personDetails?.let { person ->
-                    """
-                    <div class="section">
-                        <h3>${getPersonTypeLabel(transaction.personType, isPunjabiEnabled)} ${TranslationManager.translate("Details", isPunjabiEnabled)}</h3>
-                        <table class="details-table">
-                            <tr>
-                                <td>${TranslationManager.translate("Name", isPunjabiEnabled)}</td>
-                                <td>${person.name}</td>
-                            </tr>
-                            ${if (person.phone.isNotBlank()) """
-                            <tr>
-                                <td>${TranslationManager.translate("Phone", isPunjabiEnabled)}</td>
-                                <td>${person.phone}</td>
-                            </tr>
-                            """ else ""}
-                            ${if (person.address.isNotBlank()) """
-                            <tr>
-                                <td>${TranslationManager.translate("Address", isPunjabiEnabled)}</td>
-                                <td>${person.address}</td>
-                            </tr>
-                            """ else ""}
-                        </table>
-                    </div>
-                    """
-                } ?: ""}
-                
-                <!-- Vehicle/Product Details -->
-                ${relatedData.productDetails?.let { product ->
-                    """
-                    <div class="section">
-                        <h3>${TranslationManager.translate("Vehicle Details", isPunjabiEnabled)}</h3>
-                        <table class="details-table">
-                            <tr>
-                                <td>${TranslationManager.translate("Chassis Number", isPunjabiEnabled)}</td>
-                                <td>${product.chassisNumber}</td>
-                            </tr>
-                            ${product.type?.let { """
-                            <tr>
-                                <td>${TranslationManager.translate("Type", isPunjabiEnabled)}</td>
-                                <td>$it</td>
-                            </tr>
-                            """ } ?: ""}
-                            ${product.year?.let { """
-                            <tr>
-                                <td>${TranslationManager.translate("Year", isPunjabiEnabled)}</td>
-                                <td>$it</td>
-                            </tr>
-                            """ } ?: ""}
-                            ${product.colour?.let { """
-                            <tr>
-                                <td>${TranslationManager.translate("Colour", isPunjabiEnabled)}</td>
-                                <td>$it</td>
-                            </tr>
-                            """ } ?: ""}
-                        </table>
-                    </div>
-                    """
-                } ?: ""}
-                
-                <!-- Purchase Details -->
-                ${relatedData.purchaseDetails?.let { purchase ->
-                    """
-                    <div class="section">
-                        <h3>${TranslationManager.translate("Purchase Details", isPunjabiEnabled)}</h3>
-                        <table class="details-table">
-                            ${if (purchase.orderNumber > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Order Number", isPunjabiEnabled)}</td>
-                                <td>${purchase.orderNumber}</td>
-                            </tr>
-                            """ else ""}
-                            ${if (purchase.gstAmount > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("GST Amount", isPunjabiEnabled)}</td>
-                                <td>${currencyFormatter.format(purchase.gstAmount)}</td>
-                            </tr>
-                            """ else ""}
-                            ${if (purchase.grandTotal > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Grand Total", isPunjabiEnabled)}</td>
-                                <td class="amount">${currencyFormatter.format(purchase.grandTotal)}</td>
-                            </tr>
-                            """ else ""}
-                        </table>
-                    </div>
-                    """
-                } ?: ""}
-                
-                <!-- Sale Details -->
-                ${relatedData.saleDetails?.let { sale ->
-                    """
-                    <div class="section">
-                        <h3>${TranslationManager.translate("Sale Details", isPunjabiEnabled)}</h3>
-                        <table class="details-table">
-                            <tr>
-                                <td>${TranslationManager.translate("Total Amount", isPunjabiEnabled)}</td>
-                                <td class="amount">${currencyFormatter.format(sale.totalAmount)}</td>
-                            </tr>
-                            <tr>
-                                <td>${TranslationManager.translate("EMI", isPunjabiEnabled)}</td>
-                                <td>${if (sale.emi) TranslationManager.translate("Yes", isPunjabiEnabled) else TranslationManager.translate("No", isPunjabiEnabled)}</td>
-                            </tr>
-                            <tr>
-                                <td>${TranslationManager.translate("Status", isPunjabiEnabled)}</td>
-                                <td>${if (sale.status) TranslationManager.translate("Completed", isPunjabiEnabled) else TranslationManager.translate("Pending", isPunjabiEnabled)}</td>
-                            </tr>
-                        </table>
-                    </div>
-                    """
-                } ?: ""}
-                
-                <!-- EMI Details -->
-                ${relatedData.emiDetails?.let { emi ->
-                    """
-                    <div class="section">
-                        <h3>${TranslationManager.translate("EMI Details", isPunjabiEnabled)}</h3>
-                        <table class="details-table">
-                            <tr>
-                                <td>${TranslationManager.translate("Total Installments", isPunjabiEnabled)}</td>
-                                <td>${emi.installmentsCount}</td>
-                            </tr>
-                            <tr>
-                                <td>${TranslationManager.translate("Paid Installments", isPunjabiEnabled)}</td>
-                                <td>${emi.paidInstallments}</td>
-                            </tr>
-                            <tr>
-                                <td>${TranslationManager.translate("Remaining Installments", isPunjabiEnabled)}</td>
-                                <td>${emi.remainingInstallments}</td>
-                            </tr>
-                            <tr>
-                                <td>${TranslationManager.translate("Installment Amount", isPunjabiEnabled)}</td>
-                                <td>${currencyFormatter.format(emi.installmentAmount)}</td>
-                            </tr>
-                            ${if (emi.interestRate > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Interest Rate", isPunjabiEnabled)}</td>
-                                <td>${emi.interestRate}%</td>
-                            </tr>
-                            """ else ""}
-                            ${if (emi.priceWithInterest > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Total with Interest", isPunjabiEnabled)}</td>
-                                <td class="amount">${currencyFormatter.format(emi.priceWithInterest)}</td>
-                            </tr>
-                            """ else ""}
-                        </table>
-                    </div>
-                    """
-                } ?: ""}
-                
-                <!-- Payment Details -->
-                <div class="section payment-section">
-                    <h3>${TranslationManager.translate("Payment Details", isPunjabiEnabled)}</h3>
-                    <table class="payment-table">
-                        <tr>
-                            <td>${TranslationManager.translate("Total Amount", isPunjabiEnabled)}</td>
-                            <td class="amount highlight">${currencyFormatter.format(transaction.amount)}</td>
-                        </tr>
-                        <tr>
-                            <td>${TranslationManager.translate("Payment Method", isPunjabiEnabled)}</td>
-                            <td>${translatePaymentMethod(transaction.paymentMethod, isPunjabiEnabled)}</td>
-                        </tr>
-                    </table>
-                    
-                    ${if (transaction.paymentMethod == "MIXED" || transaction.cashAmount > 0 || transaction.bankAmount > 0 || transaction.creditAmount > 0) {
-                        """
-                        <h4>${TranslationManager.translate("Payment Breakdown", isPunjabiEnabled)}</h4>
-                        <table class="breakdown-table">
-                            ${if (transaction.cashAmount > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Cash", isPunjabiEnabled)}</td>
-                                <td>${currencyFormatter.format(transaction.cashAmount)}</td>
-                            </tr>
-                            """ else ""}
-                            ${if (transaction.bankAmount > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Bank", isPunjabiEnabled)}</td>
-                                <td>${currencyFormatter.format(transaction.bankAmount)}</td>
-                            </tr>
-                            """ else ""}
-                            ${if (transaction.creditAmount > 0) """
-                            <tr>
-                                <td>${TranslationManager.translate("Credit", isPunjabiEnabled)}</td>
-                                <td>${currencyFormatter.format(transaction.creditAmount)}</td>
-                            </tr>
-                            """ else ""}
-                        </table>
-                        """
-                    } else ""}
-                </div>
-                
-                <!-- Additional Information -->
-                ${if (transaction.description.isNotBlank()) """
-                <div class="section">
-                    <h3>${TranslationManager.translate("Description", isPunjabiEnabled)}</h3>
-                    <p class="description">${transaction.description}</p>
-                </div>
-                """ else ""}
-                
-                ${if (transaction.note.isNotBlank()) """
-                <div class="section">
-                    <h3>${TranslationManager.translate("Note", isPunjabiEnabled)}</h3>
-                    <p class="note">${transaction.note}</p>
-                </div>
-                """ else ""}
-                
-                <!-- Footer -->
-                <div class="footer">
-                    <hr class="divider">
-                    <p class="footer-text">${TranslationManager.translate("Thank you for your business!", isPunjabiEnabled)}</p>
-                    <p class="footer-note">${TranslationManager.translate("This is a computer generated bill.", isPunjabiEnabled)}</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """.trimIndent()
-    }
-    
-    private fun getBillCss(): String {
-        return """
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        @page {
-            size: A4;
-            margin: 15mm 15mm 15mm 15mm;
-        }
-        
-        body {
-            font-family: 'Arial', 'Helvetica', sans-serif;
-            font-size: 10pt;
-            line-height: 1.5;
-            color: #333;
-            background: white;
-            width: 180mm;
-            margin: 0 auto;
-        }
-        
-        .bill-container {
-            width: 180mm;
-            max-width: 180mm;
-            margin: 0 auto;
-            padding: 0;
-            background: white;
-            min-height: 267mm;
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 12pt;
-            border-bottom: 2pt solid #2563eb;
-            padding-bottom: 10pt;
-        }
-        
-        .company-name {
-            font-size: 20pt;
-            font-weight: bold;
-            color: #2563eb;
-            margin-bottom: 6pt;
-            line-height: 1.2;
-        }
-        
-        .company-address {
-            font-size: 9pt;
-            color: #666;
-            margin: 3pt 0;
-            line-height: 1.4;
-        }
-        
-        .company-contact {
-            font-size: 9pt;
-            color: #666;
-            margin: 3pt 0;
-            line-height: 1.4;
-        }
-        
-        .divider {
-            border: none;
-            border-top: 1pt solid #e5e7eb;
-            margin: 10pt 0;
-        }
-        
-        .bill-title {
-            text-align: center;
-            margin: 15pt 0;
-        }
-        
-        .bill-title h2 {
-            font-size: 16pt;
-            color: #1f2937;
-            margin-bottom: 8pt;
-            line-height: 1.3;
-        }
-        
-        .bill-number, .bill-date, .bill-time {
-            font-size: 9pt;
-            color: #6b7280;
-            margin: 2pt 0;
-            line-height: 1.4;
-        }
-        
-        .section {
-            margin: 12pt 0;
-            padding: 10pt;
-            background: #f9fafb;
-            border-radius: 4pt;
-            border-left: 3pt solid #2563eb;
-            page-break-inside: avoid;
-        }
-        
-        .payment-section {
-            border-left-color: #059669;
-        }
-        
-        .section h3 {
-            font-size: 11pt;
-            color: #1f2937;
-            margin-bottom: 8pt;
-            font-weight: bold;
-            line-height: 1.3;
-        }
-        
-        .section h4 {
-            font-size: 10pt;
-            color: #374151;
-            margin: 8pt 0 6pt 0;
-            font-weight: bold;
-            line-height: 1.3;
-        }
-        
-        .details-table, .payment-table, .breakdown-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 6pt;
-            font-size: 9pt;
-        }
-        
-        .details-table td, .payment-table td, .breakdown-table td {
-            padding: 5pt 6pt;
-            border-bottom: 0.5pt solid #e5e7eb;
-            line-height: 1.4;
-            vertical-align: top;
-        }
-        
-        .details-table td:first-child {
-            font-weight: 600;
-            color: #4b5563;
-            width: 40%;
-        }
-        
-        .payment-table td:first-child {
-            font-weight: 600;
-            color: #4b5563;
-            width: 50%;
-        }
-        
-        .amount {
-            font-size: 13pt;
-            font-weight: bold;
-            color: #059669;
-            line-height: 1.3;
-        }
-        
-        .amount.highlight {
-            font-size: 15pt;
-            color: #047857;
-        }
-        
-        .description, .note {
-            padding: 8pt;
-            background: white;
-            border-radius: 3pt;
-            margin-top: 6pt;
-            color: #374151;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 9pt;
-            line-height: 1.5;
-        }
-        
-        .footer {
-            margin-top: 20pt;
-            text-align: center;
-            page-break-inside: avoid;
-        }
-        
-        .footer-text {
-            font-size: 10pt;
-            font-weight: bold;
-            color: #1f2937;
-            margin: 8pt 0;
-            line-height: 1.4;
-        }
-        
-        .footer-note {
-            font-size: 8pt;
-            color: #9ca3af;
-            font-style: italic;
-            line-height: 1.4;
-        }
-        
-        @media print {
-            body {
-                width: 180mm;
-            }
-            .bill-container {
-                width: 180mm;
-                padding: 0;
-            }
-            .section {
-                page-break-inside: avoid;
-            }
-        }
-        """.trimIndent()
+        return generateBillHTML(
+            transaction = transaction,
+            relatedData = relatedData,
+            invoiceNumber = invoiceNumber,
+            invoiceDate = System.currentTimeMillis(),
+            buyerName = relatedData.personDetails?.name ?: transaction.personName,
+            buyerAddress = relatedData.personDetails?.address ?: "",
+            buyerGstin = ""
+        )
     }
     
     // Helper functions
