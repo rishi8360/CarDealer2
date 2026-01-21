@@ -16,10 +16,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import com.example.cardealer2.repository.PasswordRepository
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cardealer2.ViewModel.HomeScreenViewModel
@@ -41,6 +47,7 @@ import com.example.cardealer2.utility.smartPopBack
 import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,7 +158,7 @@ fun EditVehicleScreen(
             price = p.price.toString()
             sellingPrice = p.sellingPrice.toString()
             year = p.year.toString()
-            type = p.type
+            type = p.type.lowercase() // Normalize to lowercase
             nocPdfs = p.noc
             rcPdfs = p.rc
             insurancePdfs = p.insurance
@@ -315,10 +322,24 @@ fun EditVehicleScreen(
     }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
     
     var backButtonClicked by remember { mutableStateOf(false) }
+    
+    // Password protection state
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var passwordInput by remember { mutableStateOf("") }
+    var isPriceVisible by remember { mutableStateOf(false) }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    val passwordRepository = remember { PasswordRepository }
+    val storedPassword by passwordRepository.password.collectAsState()
+    
+    // Load password when component loads
+    LaunchedEffect(Unit) {
+        passwordRepository.fetchPassword(context)
+    }
     
     Scaffold(
         topBar = {
@@ -524,16 +545,27 @@ fun EditVehicleScreen(
             FilterableDropdownField(
                 label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
                 items = vehicleTypeItems,
-                selectedItem = type,
+                selectedItem = when (type.lowercase()) {
+                    "car" -> TranslationManager.translate("Car", isPunjabiEnabled)
+                    "bike" -> TranslationManager.translate("Bike", isPunjabiEnabled)
+                    else -> type
+                },
                 onItemSelected = { 
-                    // Convert translated text back to English for internal use
+                    // Convert translated text back to English and normalize to lowercase
                     type = when (it) {
-                        TranslationManager.translate("Bike", isPunjabiEnabled) -> "Bike"
-                        TranslationManager.translate("Car", isPunjabiEnabled) -> "Car"
-                        else -> it
+                        TranslationManager.translate("Bike", isPunjabiEnabled) -> "bike"
+                        TranslationManager.translate("Car", isPunjabiEnabled) -> "car"
+                        else -> it.lowercase()
                     }
                 },
-                itemToString = { it },
+                itemToString = { 
+                    // Display translated version for UI
+                    when (type.lowercase()) {
+                        "car" -> TranslationManager.translate("Car", isPunjabiEnabled)
+                        "bike" -> TranslationManager.translate("Bike", isPunjabiEnabled)
+                        else -> type
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
             
@@ -622,11 +654,39 @@ fun EditVehicleScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it },
+                    value = if (isPriceVisible || storedPassword.isEmpty()) price else "****",
+                    onValueChange = { 
+                        if (isPriceVisible || storedPassword.isEmpty()) {
+                            price = it
+                        } else if (storedPassword.isNotEmpty()) {
+                            showPasswordDialog = true
+                        }
+                    },
                     label = { TranslatedText("Purchase Price *") },
                     modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    readOnly = !isPriceVisible && storedPassword.isNotEmpty(),
+                    trailingIcon = {
+                        if (storedPassword.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    if (isPriceVisible) {
+                                        isPriceVisible = false
+                                    } else {
+                                        showPasswordDialog = true
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isPriceVisible) 
+                                        Icons.Outlined.Visibility 
+                                    else 
+                                        Icons.Outlined.VisibilityOff,
+                                    contentDescription = if (isPriceVisible) "Hide price" else "Show price"
+                                )
+                            }
+                        }
+                    }
                 )
                 OutlinedTextField(
                     value = previousOwners,
@@ -638,11 +698,39 @@ fun EditVehicleScreen(
             }
             
             OutlinedTextField(
-                value = sellingPrice,
-                onValueChange = { sellingPrice = it },
+                value = if (isPriceVisible || storedPassword.isEmpty()) sellingPrice else "****",
+                onValueChange = { 
+                    if (isPriceVisible || storedPassword.isEmpty()) {
+                        sellingPrice = it
+                    } else if (storedPassword.isNotEmpty()) {
+                        showPasswordDialog = true
+                    }
+                },
                 label = { TranslatedText("Selling Price") },
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                readOnly = !isPriceVisible && storedPassword.isNotEmpty(),
+                trailingIcon = {
+                    if (storedPassword.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                if (isPriceVisible) {
+                                    isPriceVisible = false
+                                } else {
+                                    showPasswordDialog = true
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isPriceVisible) 
+                                    Icons.Outlined.Visibility 
+                                else 
+                                    Icons.Outlined.VisibilityOff,
+                                contentDescription = if (isPriceVisible) "Hide price" else "Show price"
+                            )
+                        }
+                    }
+                }
             )
             
             DatePickerField(
@@ -867,6 +955,78 @@ fun EditVehicleScreen(
                     onClick = { if (!vehicleUiState.isLoading) showUnsavedDialog = false }
                 ) {
                     TranslatedText("Keep Editing")
+                }
+            }
+        )
+    }
+    
+    // Password Dialog
+    if (showPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPasswordDialog = false
+                passwordInput = ""
+                passwordError = null
+            },
+            title = {
+                TranslatedText(
+                    englishText = "Enter Password",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = {
+                            passwordInput = it
+                            passwordError = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { TranslatedText("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = passwordError != null,
+                        singleLine = true
+                    )
+                    if (passwordError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = passwordError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val isValid = passwordRepository.verifyPassword(context, passwordInput)
+                            if (isValid) {
+                                isPriceVisible = true
+                                showPasswordDialog = false
+                                passwordInput = ""
+                                passwordError = null
+                            } else {
+                                passwordError = "Incorrect password"
+                            }
+                        }
+                    }
+                ) {
+                    TranslatedText("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPasswordDialog = false
+                        passwordInput = ""
+                        passwordError = null
+                    }
+                ) {
+                    TranslatedText("Cancel")
                 }
             }
         )

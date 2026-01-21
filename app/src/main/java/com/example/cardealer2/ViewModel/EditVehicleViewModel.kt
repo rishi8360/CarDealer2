@@ -255,7 +255,7 @@ class EditVehicleViewModel(
                     previousOwners = previousOwners.toIntOrNull() ?: 0,
                     price = price.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
-                    type = type
+                    type = type.lowercase() // Normalize to lowercase before saving
                 )
 
                 val result = repository.updateVehicle(originalChassisNumber, updatedProduct)

@@ -728,7 +728,7 @@ object TransactionRepository {
                             "transactionDate" to Timestamp.now(),
                             "createdAt" to Timestamp.now(),
                             "orderNumber" to 0,
-                            "amount" to amount,
+                            "amount" to -amount, // Negative for outflow
                             "description" to description,
                             "type" to "TRANSFER_OUT",
                             "to" to toName
@@ -1075,10 +1075,30 @@ object TransactionRepository {
                         // Reverse the transaction effect based on type
                         val reversedAmount = when (transaction.type) {
                             TransactionType.SALE -> {
-                                val newAmount = currentAmount - transaction.amount
-                                Log.d(TAG, "      Transaction Type: SALE (decreased balance by ${transaction.amount})")
-                                Log.d(TAG, "      Calculation: $currentAmount - ${transaction.amount} = $newAmount")
-                                newAmount
+                                // Check if this is a down payment transaction for an EMI sale
+                                // Down payment transactions for EMI sales have description "Vehicle sale - EMI down payment (Cash)" or "(Bank)"
+                                // These transactions should NOT reverse customer balance because the down payment was already handled separately
+                                val descriptionLower = transaction.description.lowercase()
+                                val isEmiDownPayment = descriptionLower.contains("emi down payment")
+                                
+                                Log.d(TAG, "      Checking if down payment for EMI:")
+                                Log.d(TAG, "         Description: ${transaction.description}")
+                                Log.d(TAG, "         Lowercase description: $descriptionLower")
+                                Log.d(TAG, "         Contains 'emi down payment': $isEmiDownPayment")
+                                
+                                if (isEmiDownPayment) {
+                                    // Don't reverse customer balance for down payment transactions
+                                    // The down payment was already handled in separate transactions
+                                    // Deleting this transaction is just removing the wrong transaction record
+                                    Log.d(TAG, "      Transaction Type: SALE - Down payment for EMI (SKIPPING balance reversal)")
+                                    Log.d(TAG, "      ℹ️  Down payment balance already handled separately, not reversing customer balance")
+                                    currentAmount // Keep current balance unchanged
+                                } else {
+                                    val newAmount = currentAmount - transaction.amount
+                                    Log.d(TAG, "      Transaction Type: SALE (decreased balance by ${transaction.amount})")
+                                    Log.d(TAG, "      Calculation: $currentAmount - ${transaction.amount} = $newAmount")
+                                    newAmount
+                                }
                             }
                             TransactionType.PURCHASE -> {
                                 val newAmount = currentAmount + transaction.amount
@@ -1125,44 +1145,43 @@ object TransactionRepository {
                     Log.d(TAG, "         Installment Amount: $installmentAmount")
                     Log.d(TAG, "         Transaction Amount: ${transaction.amount}")
                     
-                    // Extract installment number from description (e.g., "EMI Payment - Installment 3/12")
+                    // Since we now always count payments as installments (regardless of amount),
+                    // we should always reverse the installment count when deleting
                     val description = transaction.description
-                    val installmentMatch = Regex("Installment (\\d+)/").find(description)
-                    val wasInstallmentCompleted = installmentMatch != null
-                    
                     Log.d(TAG, "      Description: $description")
-                    Log.d(TAG, "      Was Installment Completed: $wasInstallmentCompleted")
                     
                     val emiUpdateMap = hashMapOf<String, Any>()
                     
-                    if (wasInstallmentCompleted && currentPaidInstallments > 0) {
+                    // Always reverse installment count (since all payments now count as installments)
+                    if (currentPaidInstallments > 0) {
                         // Reverse: decrement paidInstallments, increment remainingInstallments
                         val newPaidInstallments = currentPaidInstallments - 1
                         val newRemainingInstallments = currentRemainingInstallments + 1
                         emiUpdateMap["paidInstallments"] = newPaidInstallments
                         emiUpdateMap["remainingInstallments"] = newRemainingInstallments
                         
-                        Log.d(TAG, "      ✅ Reversing installment completion:")
+                        Log.d(TAG, "      ✅ Reversing installment count:")
                         Log.d(TAG, "         Paid Installments: $currentPaidInstallments -> $newPaidInstallments")
                         Log.d(TAG, "         Remaining Installments: $currentRemainingInstallments -> $newRemainingInstallments")
-                        
-                        // Reverse pendingExtraBalance
-                        val totalPayment = transaction.amount
-                        val excessAmount = if (totalPayment > installmentAmount) {
-                            totalPayment - installmentAmount
-                        } else {
-                            0.0
-                        }
-                        val newPendingExtraBalance = maxOf(0.0, currentPendingExtraBalance - excessAmount)
-                        emiUpdateMap["pendingExtraBalance"] = newPendingExtraBalance
-                        Log.d(TAG, "         Excess Amount: $excessAmount")
-                        Log.d(TAG, "         Pending Extra Balance: $currentPendingExtraBalance -> $newPendingExtraBalance")
-                    } else {
-                        // Payment didn't complete an installment, just affected pendingExtraBalance
-                        val totalPayment = transaction.amount
+                    }
+                    
+                    // Reverse pendingExtraBalance based on payment amount
+                    val totalPayment = transaction.amount
+                    val totalAvailable = currentPendingExtraBalance + totalPayment
+                    
+                    if (totalAvailable < installmentAmount) {
+                        // Payment was less than installment amount, reverse by subtracting total payment
                         val newPendingExtraBalance = maxOf(0.0, currentPendingExtraBalance - totalPayment)
                         emiUpdateMap["pendingExtraBalance"] = newPendingExtraBalance
-                        Log.d(TAG, "      ✅ Reversing partial payment:")
+                        Log.d(TAG, "      ✅ Reversing payment (less than installment):")
+                        Log.d(TAG, "         Pending Extra Balance: $currentPendingExtraBalance -> $newPendingExtraBalance")
+                    } else {
+                        // Payment was equal to or greater than installment amount
+                        val excessAmount = totalAvailable - installmentAmount
+                        val newPendingExtraBalance = maxOf(0.0, currentPendingExtraBalance - excessAmount)
+                        emiUpdateMap["pendingExtraBalance"] = newPendingExtraBalance
+                        Log.d(TAG, "      ✅ Reversing payment (equal or greater than installment):")
+                        Log.d(TAG, "         Excess Amount: $excessAmount")
                         Log.d(TAG, "         Pending Extra Balance: $currentPendingExtraBalance -> $newPendingExtraBalance")
                     }
                     
@@ -1204,6 +1223,26 @@ object TransactionRepository {
                 
                 // 4. Reverse capital balances and remove transaction entries
                 Log.d(TAG, "   🔄 Step 2.4: Reversing capital balances...")
+                
+                // For transfers, determine which account is FROM and which is TO
+                val isTransfer = transaction.description.contains("Transfer", ignoreCase = true) 
+                    || (transaction.cashAmount > 0 && transaction.bankAmount > 0)
+                
+                // Determine transfer direction from description if it's a transfer
+                var transferFromType: String? = null
+                var transferToType: String? = null
+                if (isTransfer) {
+                    // Try to extract FROM and TO from description
+                    // Format: "Transfer from X to Y" or "Transfer from Customer X to Cash"
+                    val desc = transaction.description
+                    if (desc.contains("from", ignoreCase = true) && desc.contains("to", ignoreCase = true)) {
+                        val fromMatch = Regex("from\\s+([^\\s]+)", RegexOption.IGNORE_CASE).find(desc)
+                        val toMatch = Regex("to\\s+([^\\s]+)", RegexOption.IGNORE_CASE).find(desc)
+                        fromMatch?.let { transferFromType = it.groupValues[1] }
+                        toMatch?.let { transferToType = it.groupValues[1] }
+                    }
+                }
+                
                 capitalSnapshots.forEachIndexed { index, snapshot ->
                     val capitalRef = capitalRefs[index]
                     val capitalType = capitalRef.id // "Cash", "Bank", or "Credit"
@@ -1225,21 +1264,81 @@ object TransactionRepository {
                         Log.d(TAG, "         Current balance: $currentBalance")
                         Log.d(TAG, "         Current transactions count: ${existingTransactions.size}")
                         
+                        // Find matching transaction entry to get its amount sign
+                        // Match by transactionNumber OR reference OR orderNumber OR description/amount for transfers
+                        val matchingTrans = existingTransactions.find { trans ->
+                            val matchTransactionNumber = (trans["transactionNumber"] as? Number)?.toInt() == transaction.transactionNumber
+                            val matchReference = (trans["reference"] as? DocumentReference)?.path == transaction.relatedRef?.path
+                            val matchOrderNumber = (trans["orderNumber"] as? Number)?.toInt() == transaction.orderNumber
+                            // For transfers, also try matching by description and amount (absolute value)
+                            val matchDescription = isTransfer && (trans["description"] as? String)?.contains("Transfer", ignoreCase = true) == true
+                            val matchAmount = isTransfer && kotlin.math.abs((trans["amount"] as? Number)?.toDouble() ?: 0.0) == amountToReverse
+                            val matchType = isTransfer && (trans["type"] as? String)?.let { it == "TRANSFER_OUT" || it == "TRANSFER_IN" } == true
+                            matchTransactionNumber || matchReference || matchOrderNumber || (matchDescription && matchAmount) || (matchType && matchAmount)
+                        }
+                        
+                        // Get the stored amount from capital transaction (can be negative for outflows)
+                        val storedAmount = matchingTrans?.let { trans ->
+                            (trans["amount"] as? Number)?.toDouble() ?: amountToReverse
+                        } ?: run {
+                            // If not found and it's a transfer, infer from capital type and transfer direction
+                            if (isTransfer) {
+                                // For transfers between capital accounts:
+                                // - FROM account has negative stored amount (outflow) or type "TRANSFER_OUT"
+                                // - TO account has positive stored amount (inflow) or type "TRANSFER_IN"
+                                // Check if this capital type is the FROM or TO account
+                                val isFromAccount = when {
+                                    transferFromType != null -> capitalType.equals(transferFromType, ignoreCase = true)
+                                    // If both cashAmount and bankAmount are set, check for TRANSFER_OUT type in transactions
+                                    else -> {
+                                        // Try to find any transaction with TRANSFER_OUT type for this capital
+                                        existingTransactions.any { it["type"] == "TRANSFER_OUT" }
+                                    }
+                                }
+                                if (isFromAccount) {
+                                    -amountToReverse // Negative for FROM account
+                                } else {
+                                    amountToReverse // Positive for TO account
+                                }
+                            } else {
+                                amountToReverse // Default to positive if not a transfer
+                            }
+                        }
+                        
                         // Remove transaction entry matching this transaction
-                        // Match by transactionNumber OR reference OR orderNumber
                         val initialCount = existingTransactions.size
                         val updatedTransactions = existingTransactions.filterNot { trans ->
                             val matchTransactionNumber = (trans["transactionNumber"] as? Number)?.toInt() == transaction.transactionNumber
                             val matchReference = (trans["reference"] as? DocumentReference)?.path == transaction.relatedRef?.path
                             val matchOrderNumber = (trans["orderNumber"] as? Number)?.toInt() == transaction.orderNumber
-                            matchTransactionNumber || matchReference || matchOrderNumber
+                            // For transfers, also match by description and amount
+                            val matchDescription = isTransfer && (trans["description"] as? String)?.contains("Transfer", ignoreCase = true) == true
+                            val matchAmount = isTransfer && kotlin.math.abs((trans["amount"] as? Number)?.toDouble() ?: 0.0) == amountToReverse
+                            val matchType = isTransfer && (trans["type"] as? String)?.let { it == "TRANSFER_OUT" || it == "TRANSFER_IN" } == true
+                            matchTransactionNumber || matchReference || matchOrderNumber || (matchDescription && matchAmount) || (matchType && matchAmount)
                         }
                         val removedCount = initialCount - updatedTransactions.size
                         Log.d(TAG, "         Removed $removedCount transaction entry/entries from transactions array")
                         Log.d(TAG, "         Updated transactions count: ${updatedTransactions.size}")
+                        Log.d(TAG, "         Stored amount in capital transaction: $storedAmount")
                         
                         // Reverse balance change based on transaction type
+                        // For transfers, use the sign of stored amount: negative = outflow (reverse by adding), positive = inflow (reverse by subtracting)
                         val newBalance = when {
+                            isTransfer -> {
+                                // Use sign of stored amount: negative = outflow, positive = inflow
+                                val newBal = if (storedAmount < 0) {
+                                    // Negative amount = outflow was recorded, reverse by adding (subtracting negative = adding)
+                                    currentBalance + amountToReverse
+                                } else {
+                                    // Positive amount = inflow was recorded, reverse by subtracting
+                                    currentBalance - amountToReverse
+                                }
+                                Log.d(TAG, "         Type: TRANSFER (stored amount: $storedAmount)")
+                                Log.d(TAG, "         ${if (storedAmount < 0) "Outflow" else "Inflow"} - reversing by ${if (storedAmount < 0) "adding" else "subtracting"}")
+                                Log.d(TAG, "         Calculation: $currentBalance ${if (storedAmount < 0) "+" else "-"} $amountToReverse = $newBal")
+                                newBal
+                            }
                             transaction.type == TransactionType.SALE -> {
                                 val newBal = currentBalance - amountToReverse
                                 Log.d(TAG, "         Type: SALE (subtracting from capital)")
@@ -1262,21 +1361,6 @@ object TransactionRepository {
                                 val newBal = currentBalance + amountToReverse
                                 Log.d(TAG, "         Type: BROKER_FEE (adding to capital)")
                                 Log.d(TAG, "         Calculation: $currentBalance + $amountToReverse = $newBal")
-                                newBal
-                            }
-                            transaction.description.startsWith("Transfer from") -> {
-                                // Determine if this was a transfer in or out
-                                val transType = (existingTransactions.find { 
-                                    (it["reference"] as? DocumentReference)?.path == transaction.relatedRef?.path ||
-                                    (it["transactionNumber"] as? Number)?.toInt() == transaction.transactionNumber
-                                }?.get("type") as? String) ?: ""
-                                val newBal = if (transType.contains("TRANSFER_IN")) {
-                                    currentBalance - amountToReverse
-                                } else {
-                                    currentBalance + amountToReverse
-                                }
-                                Log.d(TAG, "         Type: TRANSFER ($transType)")
-                                Log.d(TAG, "         Calculation: $currentBalance ${if (transType.contains("TRANSFER_IN")) "-" else "+"} $amountToReverse = $newBal")
                                 newBal
                             }
                             else -> {

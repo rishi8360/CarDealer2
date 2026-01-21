@@ -127,6 +127,7 @@ fun EmiDueScreen(
     // Load data when date range changes or on initial load
     LaunchedEffect(fromDateTimestamp, toDateTimestamp) {
         viewModel.loadEmiScheduleWithDateRange(fromDateTimestamp, toDateTimestamp)
+        viewModel.loadCapitalBalances() // Refresh capital balances
     }
     
     val tabs = remember(isPunjabiEnabled) {
@@ -188,6 +189,7 @@ fun EmiDueScreen(
                             IconButton(
                                 onClick = { 
                                     viewModel.loadEmiScheduleWithDateRange(fromDateTimestamp, toDateTimestamp)
+                                    viewModel.loadCapitalBalances() // Refresh capital balances
                                 },
                                 enabled = !isLoading
                             ) {

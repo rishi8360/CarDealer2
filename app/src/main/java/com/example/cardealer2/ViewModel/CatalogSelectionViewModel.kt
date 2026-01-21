@@ -160,11 +160,131 @@ class CatalogSelectionViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Select all vehicles (models) for a specific brand
+     * Used in Vehicle Selection screen
+     */
+    fun selectAllVehiclesForBrand(brandId: String) {
+        _state.update { state ->
+            val brand = state.brands.find { it.brandId == brandId } ?: return@update state
+            val allVehicleIds = brand.vehicle.map { it.productId }.toSet()
+            val newSelectedVehicles = state.selectedVehicles.toMutableMap().apply {
+                put(brandId, allVehicleIds)
+            }
+            val newSelectedBrands = if (allVehicleIds.isNotEmpty()) {
+                state.selectedBrandIds + brandId
+            } else {
+                state.selectedBrandIds
+            }
+            state.copy(
+                selectedBrandIds = newSelectedBrands,
+                selectedVehicles = newSelectedVehicles
+            )
+        }
+    }
+
+    /**
+     * Select all filtered individual vehicles
+     * Used in Individual Vehicle Selection screen - only selects vehicles that match current filters
+     */
+    fun selectAllFilteredIndividualVehicles() {
+        val currentState = _state.value
+        val allVehicles = currentState.individualVehiclesForSelection
+        val filters = currentState.filterState
+        
+        // Apply filters manually (same logic as getFilteredIndividualVehicles)
+        val filteredVehicles = if (!filters.hasActiveFilters()) {
+            allVehicles
+        } else {
+            allVehicles.filter { product ->
+                // Color filter
+                if (filters.selectedColor != null && !filters.selectedColor.isBlank()) {
+                    if (!product.colour.equals(filters.selectedColor, ignoreCase = true)) {
+                        return@filter false
+                    }
+                }
+                
+                // Price range filters (using sellingPrice)
+                if (filters.minPrice != null && product.sellingPrice < filters.minPrice) {
+                    return@filter false
+                }
+                if (filters.maxPrice != null && product.sellingPrice > filters.maxPrice) {
+                    return@filter false
+                }
+                
+                // Chassis number filter
+                if (!filters.chassisNumber.isNullOrBlank()) {
+                    if (!product.chassisNumber.contains(filters.chassisNumber, ignoreCase = true)) {
+                        return@filter false
+                    }
+                }
+                
+                // Condition filter
+                if (filters.condition != null && !filters.condition.isBlank()) {
+                    if (!product.condition.equals(filters.condition, ignoreCase = true)) {
+                        return@filter false
+                    }
+                }
+                
+                // KM range filters
+                if (filters.minKms != null && product.kms < filters.minKms) {
+                    return@filter false
+                }
+                if (filters.maxKms != null && product.kms > filters.maxKms) {
+                    return@filter false
+                }
+                
+                // Year range filters
+                if (filters.minYear != null && product.year < filters.minYear) {
+                    return@filter false
+                }
+                if (filters.maxYear != null && product.year > filters.maxYear) {
+                    return@filter false
+                }
+                
+                true
+            }
+        }
+        
+        val filteredChassisNumbers = filteredVehicles.map { it.chassisNumber }.toSet()
+        _state.update { it.copy(selectedIndividualVehicles = filteredChassisNumbers) }
+    }
+
+    /**
+     * Reset all product prices to their original selling prices
+     * Used in Price Editing screen
+     */
+    fun resetAllPricesToOriginal() {
+        _state.update { state ->
+            val updatedProducts = state.productsForPriceEditing.map { productWithPrice ->
+                productWithPrice.copy(sellingPrice = productWithPrice.product.sellingPrice)
+            }
+            state.copy(productsForPriceEditing = updatedProducts)
+        }
+    }
+
     fun clearAllSelections() {
         _state.update { state ->
             state.copy(
                 selectedBrandIds = emptySet(),
                 selectedVehicles = emptyMap()
+            )
+        }
+    }
+
+    /**
+     * Clear all vehicle selections for a specific brand
+     * Used in Vehicle Selection screen
+     */
+    fun clearVehiclesForBrand(brandId: String) {
+        _state.update { state ->
+            val newSelectedVehicles = state.selectedVehicles.toMutableMap().apply {
+                remove(brandId)
+            }
+            val newSelectedBrands = state.selectedBrandIds - brandId
+            state.copy(
+                selectedBrandIds = newSelectedBrands,
+                selectedVehicles = newSelectedVehicles
             )
         }
     }

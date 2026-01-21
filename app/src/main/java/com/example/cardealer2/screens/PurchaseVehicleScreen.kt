@@ -31,6 +31,7 @@ import androidx.navigation.NavController
 import com.example.cardealer2.ViewModel.HomeScreenViewModel
 import com.example.cardealer2.ViewModel.PurchaseVehicleViewModel
 import com.example.cardealer2.ViewModel.VehicleFormViewModel
+import com.example.cardealer2.ViewModel.LedgerViewModel
 import com.example.cardealer2.components.PdfPickerField
 import com.example.cardealer2.data.Brand
 import com.example.cardealer2.data.Broker
@@ -50,7 +51,12 @@ import com.example.cardealer2.utility.smartPopBack
 import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
 import com.example.cardealer2.utils.TranslationDictionary
+import com.example.cardealer2.utils.TransactionBillGenerator
+import com.example.cardealer2.screens.transactions.PrintBillDialog
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -180,10 +186,42 @@ fun PurchaseVehicleScreen(
         }
     }
 
-    // Navigate back on success
-    LaunchedEffect(uiState.purchaseVehicleSuccess) {
-        if (uiState.purchaseVehicleSuccess) {
-            navController.smartPopBack()
+    // Bill generation dialog state
+    var showBillDialog by remember { mutableStateOf(false) }
+    var billRelatedData by remember { mutableStateOf<TransactionBillGenerator.BillRelatedData?>(null) }
+    var isLoadingBillData by remember { mutableStateOf(false) }
+    
+    val ledgerViewModel: LedgerViewModel = viewModel()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Show bill dialog when transaction succeeds
+    LaunchedEffect(uiState.purchaseVehicleSuccess, uiState.createdTransaction) {
+        if (uiState.purchaseVehicleSuccess && uiState.createdTransaction != null && !showBillDialog) {
+            // Fetch related data for bill generation
+            isLoadingBillData = true
+            scope.launch {
+                try {
+                    val relatedDataResult = withContext(Dispatchers.IO) {
+                        ledgerViewModel.fetchBillRelatedData(context, uiState.createdTransaction!!)
+                    }
+                    relatedDataResult.fold(
+                        onSuccess = { relatedData ->
+                            billRelatedData = relatedData
+                            isLoadingBillData = false
+                            showBillDialog = true
+                        },
+                        onFailure = { error ->
+                            // If fetching related data fails, still show dialog (user can generate bill manually later)
+                            isLoadingBillData = false
+                            showBillDialog = true
+                        }
+                    )
+                } catch (e: Exception) {
+                    isLoadingBillData = false
+                    showBillDialog = true
+                }
+            }
         }
     }
 
@@ -250,7 +288,6 @@ fun PurchaseVehicleScreen(
                 chassisNumber.isNotBlank()
     }
 
-    val context = LocalContext.current
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
     
@@ -665,6 +702,19 @@ fun PurchaseVehicleScreen(
             }
         }
     }
+    
+    // Bill Generation Dialog
+    if (showBillDialog && uiState.createdTransaction != null && billRelatedData != null) {
+        PrintBillDialog(
+            transaction = uiState.createdTransaction!!,
+            relatedData = billRelatedData!!,
+            onDismiss = {
+                showBillDialog = false
+                // Navigate back after dialog is dismissed
+                navController.smartPopBack()
+            }
+        )
+    }
 }
 @Composable
 fun StepIndicator(
@@ -1023,19 +1073,19 @@ fun Step2Content(
             label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
             items = vehicleTypes,
             selectedItem = type?.let { 
-                if (isPunjabiEnabled) {
-                    when(it) {
-                        "Bike" -> TranslationManager.translate("Bike", true)
-                        "Car" -> TranslationManager.translate("Car", true)
-                        else -> it
-                    }
-                } else it
+                // Display translated version for UI
+                when(it.lowercase()) {
+                    "car" -> TranslationManager.translate("Car", isPunjabiEnabled)
+                    "bike" -> TranslationManager.translate("Bike", isPunjabiEnabled)
+                    else -> it
+                }
             },
             onItemSelected = { translatedType ->
+                // Convert translated text back to English and normalize to lowercase
                 val englishType = when(translatedType) {
-                    TranslationManager.translate("Bike", true) -> "Bike"
-                    TranslationManager.translate("Car", true) -> "Car"
-                    else -> translatedType
+                    TranslationManager.translate("Bike", isPunjabiEnabled) -> "bike"
+                    TranslationManager.translate("Car", isPunjabiEnabled) -> "car"
+                    else -> translatedType.lowercase()
                 }
                 onTypeSelected(englishType)
             },

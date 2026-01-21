@@ -35,7 +35,6 @@ import com.example.cardealer2.utils.TranslatedText
 import com.example.cardealer2.utils.TranslationDictionary
 import com.example.cardealer2.repository.CompanyRepository
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -52,28 +51,39 @@ fun HomeScreen(
     val filter by viewModel.filteredBrands.collectAsState()
     val currentRoute by navController.currentBackStackEntryAsState()
     
+    // 🔹 Drawer state from ViewModel
+    val drawerStateValue by viewModel.drawerState.collectAsState()
+    val canOpenDrawer by viewModel.canOpenDrawer.collectAsState()
+    
     val context = LocalContext.current
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
     
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerState = rememberDrawerState(initialValue = drawerStateValue)
     val scope = rememberCoroutineScope()
     
-    // Track navigation to prevent race condition when opening drawer immediately after back button
-    var canOpenDrawer by remember { mutableStateOf(true) }
+    // 🔹 Sync ViewModel drawer state with DrawerState
+    LaunchedEffect(drawerStateValue) {
+        when (drawerStateValue) {
+            DrawerValue.Open -> drawerState.open()
+            DrawerValue.Closed -> drawerState.close()
+        }
+    }
     
-    // Reset drawer state when returning to this screen
+    // 🔹 Sync DrawerState changes back to ViewModel
+    LaunchedEffect(drawerState.currentValue) {
+        if (drawerState.currentValue != drawerStateValue) {
+            when (drawerState.currentValue) {
+                DrawerValue.Open -> viewModel.openDrawer()
+                DrawerValue.Closed -> viewModel.closeDrawer()
+            }
+        }
+    }
+    
+    // 🔹 Reset drawer state when returning to this screen
     LaunchedEffect(currentRoute?.id) {
         if (currentRoute?.destination?.route == "home") {
-            // Prevent drawer from opening immediately after navigation to avoid race condition
-            canOpenDrawer = false
-            // Close drawer if open
-            if (drawerState.isOpen) {
-                drawerState.close()
-            }
-            // Small delay to prevent race condition with rapid back button + drawer open
-            delay(150)
-            canOpenDrawer = true
+            viewModel.resetDrawerState()
         }
     }
 
@@ -88,33 +98,38 @@ fun HomeScreen(
             ) {
                 DrawerContent(
                     onAddCustomerClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("add_customer") {
-                            popUpTo("home") { inclusive = false } // keep Home in back stack
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("add_customer") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onViewCustomersClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("view_customer") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("view_customer") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onViewBrokersClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("view_broker") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("view_broker") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onPurchaseVehicleClick = {
                         scope.launch {
-                            drawerState.close()
-                            // Wait for drawer to close before navigating
+                            viewModel.closeDrawer()
                             navController.navigate("purchase_vehicle") {
                                 popUpTo("home") { inclusive = false }
                                 launchSingleTop = true
@@ -123,38 +138,48 @@ fun HomeScreen(
                         }
                     },
                     onCatalogSelection = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("catalog_selection") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("catalog_selection") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onEmiScheduleClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("emi_due") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("emi_due") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onAllTransactionsClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("all_transactions") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("all_transactions") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
                     onSettingsClick = {
-                        scope.launch { drawerState.close() }
-                        navController.navigate("settings") {
-                            popUpTo("home") { inclusive = false }
-                            launchSingleTop = true
-                            restoreState = true
+                        scope.launch { 
+                            viewModel.closeDrawer()
+                            navController.navigate("settings") {
+                                popUpTo("home") { inclusive = false }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
-                    onCloseDrawer = { scope.launch { drawerState.close() } }
+                    onCloseDrawer = { 
+                        scope.launch { viewModel.closeDrawer() }
+                    }
                 )
 
             }
@@ -183,10 +208,7 @@ fun HomeScreen(
                     ) {
                         IconButton(
                             onClick = { 
-                                // Prevent opening drawer immediately after navigation to avoid race condition
-                                if (canOpenDrawer) {
-                                    scope.launch { drawerState.open() }
-                                }
+                                viewModel.openDrawer()
                             },
                             modifier = Modifier
                                 .shadow(4.dp, CircleShape)

@@ -124,248 +124,296 @@ object TransactionBillGenerator {
             }
         }
         
+        // Format invoice date
+        val formattedInvoiceDate = invoiceDateFormat.format(Date(invoiceDate))
+        val placeOfSupply = "Haryana (06)"
+        
         return """
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
+
 * {
-margin: 0;
-padding: 0;
-box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
+
 body {
-font-family: Arial, sans-serif;
-font-size: 12px;
-padding: 20px;
-background: white;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  padding: 18px 0 0 22px;
+  background: white;
+  max-width: 794px;
+  margin: 0;
 }
+
 .header {
-text-align: center;
-margin-bottom: 20px;
+  text-align: center;
+  margin-bottom: 16px;
 }
+
 .header h1 {
-font-size: 24px;
-font-weight: bold;
-margin-bottom: 10px;
+  font-size: 22px;
+  font-weight: bold;
 }
+
 .original-copy {
-text-align: right;
-font-weight: bold;
-margin-bottom: 10px;
+  text-align: right;
+  font-weight: bold;
+  margin-bottom: 8px;
 }
+
 .company-info {
-margin-bottom: 20px;
+  margin-bottom: 14px;
 }
+
 .company-info h2 {
-font-size: 18px;
-margin-bottom: 10px;
+  font-size: 16px;
+  margin-bottom: 6px;
 }
+
 .info-row {
-margin: 5px 0;
+  margin: 4px 0;
 }
+
 .two-columns {
-display: flex;
-justify-content: space-between;
-margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
 }
-.column {
-width: 48%;
+
+.column-left {
+  width: 55%;
+  min-width: 300px;
 }
-.invoice-details {
-margin-bottom: 20px;
+
+.column-right {
+  width: 40%;
+  min-width: 230px;
 }
+
 .invoice-details table {
-width: 100%;
-border-collapse: collapse;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
+
 .invoice-details td {
-padding: 5px;
-border: 1px solid #ddd;
+  padding: 5px;
+  border: 1px solid #ddd;
+  word-wrap: break-word;
 }
+
 .invoice-details td:first-child {
-font-weight: bold;
-width: 40%;
+  font-weight: bold;
+  width: 42%;
 }
+
 .service-table {
-width: 100%;
-border-collapse: collapse;
-margin-bottom: 20px;
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 14px;
+  table-layout: fixed;
+  page-break-inside: avoid;
 }
+
 .service-table th,
 .service-table td {
-border: 1px solid #000;
-padding: 8px;
-text-align: left;
+  border: 1px solid #000;
+  padding: 7px;
+  word-wrap: break-word;
 }
+
 .service-table th {
-background-color: #f0f0f0;
-font-weight: bold;
-text-align: center;
+  background-color: #f0f0f0;
+  text-align: center;
 }
-.service-table td {
-text-align: right;
+
+.service-table th:nth-child(1),
+.service-table td:nth-child(1) {
+  width: 6%;
+  text-align: center;
 }
-.service-table td:first-child,
+
+.service-table th:nth-child(2),
 .service-table td:nth-child(2) {
-text-align: left;
+  width: 64%;
+  text-align: left;
 }
-.summary {
-margin-bottom: 20px;
+
+.service-table th:nth-child(3),
+.service-table td:nth-child(3) {
+  width: 30%;
+  text-align: right;
 }
+
 .summary table {
-width: 100%;
-border-collapse: collapse;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  page-break-inside: avoid;
 }
+
 .summary td {
-padding: 5px;
-border: 1px solid #ddd;
+  padding: 5px;
+  border: 1px solid #ddd;
 }
+
 .summary td:first-child {
-font-weight: bold;
-width: 70%;
+  width: 75%;
+  font-weight: bold;
 }
+
 .summary td:last-child {
-text-align: right;
+  width: 25%;
+  text-align: right;
 }
+
 .tax-summary {
-margin-bottom: 20px;
+  page-break-inside: avoid;
 }
+
 .tax-summary table {
-width: 100%;
-border-collapse: collapse;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
+
 .tax-summary th,
 .tax-summary td {
-border: 1px solid #000;
-padding: 8px;
-text-align: center;
+  border: 1px solid #000;
+  padding: 7px;
+  text-align: center;
 }
+
 .tax-summary th {
-background-color: #f0f0f0;
-font-weight: bold;
+  background-color: #f0f0f0;
 }
+
+.tax-summary th:nth-child(1),
+.tax-summary td:nth-child(1) {
+  width: 40%;
+}
+
+.tax-summary th:nth-child(2),
+.tax-summary td:nth-child(2),
+.tax-summary th:nth-child(3),
+.tax-summary td:nth-child(3),
+.tax-summary th:nth-child(4),
+.tax-summary td:nth-child(4) {
+  width: 20%;
+}
+
 .amount-in-words {
-margin: 20px 0;
-padding: 10px;
-border: 1px solid #000;
-font-weight: bold;
+  margin: 16px 0;
+  padding: 8px;
+  border: 1px solid #000;
+  font-weight: bold;
+  page-break-inside: avoid;
 }
+
 @media print {
-body {
-padding: 10px;
+  body {
+    padding: 12px;
+  }
+
+  table, tr, td, th {
+    page-break-inside: avoid !important;
+  }
 }
-}
+
 </style>
 </head>
+
 <body>
+
 <div class="original-copy">ORIGINAL COPY</div>
+
 <div class="header">
-<h1>TAX INVOICE</h1>
+  <h1>TAX INVOICE</h1>
 </div>
+
 <div class="company-info">
-<h2>$companyName</h2>
-${if (companyAddress.isNotBlank()) "<div class=\"info-row\">$companyAddress</div>" else ""}
-${if (companyGstin.isNotBlank()) "<div class=\"info-row\">GSTIN: $companyGstin</div>" else ""}
+  <h2>${companyName}</h2>
+  <div class="info-row">${companyAddress}</div>
+  <div class="info-row">GSTIN: ${companyGstin}</div>
 </div>
+
 <div class="two-columns">
-<div class="column">
-<h3>Party Details (Buyer):</h3>
-<div class="info-row"><strong>Name:</strong> ${if (buyerName.isNotBlank()) buyerName else (relatedData.personDetails?.name ?: transaction.personName)}</div>
-${if (buyerAddress.isNotBlank() || relatedData.personDetails?.address?.isNotBlank() == true) {
-    "<div class=\"info-row\"><strong>Address:</strong> ${buyerAddress.ifBlank { relatedData.personDetails?.address ?: "" }}</div>"
-} else ""}
-${if (buyerGstin.isNotBlank()) "<div class=\"info-row\"><strong>GSTIN / UIN:</strong> $buyerGstin</div>" else ""}
+
+  <div class="column-left">
+    <h3>Party Details (Buyer):</h3>
+    <div class="info-row"><strong>Name:</strong> ${buyerName}</div>
+    <div class="info-row"><strong>Address:</strong> ${buyerAddress}</div>
+    <div class="info-row"><strong>GSTIN:</strong> ${buyerGstin}</div>
+  </div>
+
+  <div class="column-right">
+    <div class="invoice-details">
+      <table>
+        <tr><td>Invoice No.</td><td>${invoiceNumber}</td></tr>
+        <tr><td>Dated</td><td>${formattedInvoiceDate}</td></tr>
+        <tr><td>Place of Supply</td><td>${placeOfSupply}</td></tr>
+      </table>
+    </div>
+  </div>
+
 </div>
-<div class="column">
-<div class="invoice-details">
-<table>
-<tr>
-<td>Invoice No.:</td>
-<td>$invoiceNumber</td>
-</tr>
-<tr>
-<td>Dated:</td>
-<td>${invoiceDateFormat.format(Date(invoiceDate))}</td>
-</tr>
-<tr>
-<td>Place of Supply:</td>
-<td>Haryana (06)</td>
-</tr>
-</table>
-</div>
-</div>
-</div>
+
 <table class="service-table">
 <thead>
 <tr>
-<th>S.N.</th>
-<th>Description of Service</th>
-<th>Amount (₹)</th>
+  <th>S.N.</th>
+  <th>Description of Service</th>
+  <th>Amount (₹)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>1</td>
-<td>$productDescription</td>
-<td>${formatCurrencyAmount(baseAmount)}</td>
+  <td>1</td>
+  <td>${productDescription}</td>
+  <td>${formatCurrencyAmount(baseAmount)}</td>
 </tr>
 </tbody>
 </table>
+
 <div class="summary">
 <table>
-<tr>
-<td>Subtotal:</td>
-<td>${formatCurrencyAmount(baseAmount)}</td>
-</tr>
-${if (discount > 0) {
-    "<tr><td>Less: Discount:</td><td>-${formatCurrencyAmount(discount)}</td></tr>"
-} else ""}
-<tr>
-<td>Taxable Amount:</td>
-<td>${formatCurrencyAmount(afterDiscount)}</td>
-</tr>
-${if (gstPercentage > 0) {
-    "<tr><td>Add: GST (${String.format("%.2f", gstPercentage)}%):</td><td>${formatCurrencyAmount(gstAmount)}</td></tr>"
-} else if (gstAmount > 0) {
-    "<tr><td>Add: GST:</td><td>${formatCurrencyAmount(gstAmount)}</td></tr>"
-} else ""}
-${if (Math.abs(roundedOff) > 0.01) {
-    "<tr><td>Add: Rounded Off (${if (roundedOff > 0) "+" else ""}):</td><td>${formatCurrencyAmount(roundedOff)}</td></tr>"
-} else ""}
-<tr style="font-weight: bold; font-size: 14px;">
-<td>Grand Total:</td>
-<td>${formatCurrencyAmount(roundedTotal.toDouble())}</td>
-</tr>
+<tr><td>Subtotal</td><td>${formatCurrencyAmount(baseAmount)}</td></tr>
+<tr><td>Less: Discount</td><td>${formatCurrencyAmount(discount)}</td></tr>
+<tr><td>Taxable Amount</td><td>${formatCurrencyAmount(afterDiscount)}</td></tr>
+<tr><td>Add: GST (${String.format("%.2f", gstPercentage)}%)</td><td>${formatCurrencyAmount(gstAmount)}</td></tr>
+<tr style="font-weight:bold"><td>Grand Total</td><td>${formatCurrencyAmount(roundedTotal.toDouble())}</td></tr>
 </table>
 </div>
-${if (gstPercentage > 0 || gstAmount > 0) {
-    """
+
 <div class="tax-summary">
 <table>
 <thead>
 <tr>
-<th>Taxable Value</th>
-<th>CGST</th>
-<th>SGST</th>
-<th>Total GST</th>
+  <th>Taxable Value</th>
+  <th>CGST</th>
+  <th>SGST</th>
+  <th>Total GST</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>${formatCurrencyAmount(afterDiscount)}</td>
-<td>${formatCurrencyAmount(cgstAmount)}</td>
-<td>${formatCurrencyAmount(sgstAmount)}</td>
-<td>${formatCurrencyAmount(gstAmount)}</td>
+  <td>${formatCurrencyAmount(afterDiscount)}</td>
+  <td>${formatCurrencyAmount(cgstAmount)}</td>
+  <td>${formatCurrencyAmount(sgstAmount)}</td>
+  <td>${formatCurrencyAmount(gstAmount)}</td>
 </tr>
 </tbody>
 </table>
 </div>
-"""
-} else ""}
+
 <div class="amount-in-words">
-<strong>Amount in Words:</strong> Rupees $amountInWords Only
+  Amount in Words: ${amountInWords}
 </div>
 <div style="margin-top: 60px; text-align: center; padding: 30px 20px;">
 <h2 style="color: #1976d2; margin-bottom: 10px; font-size: 20px;">Thank You!</h2>

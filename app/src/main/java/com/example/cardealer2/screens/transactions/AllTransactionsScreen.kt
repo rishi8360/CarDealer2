@@ -7,23 +7,34 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,8 +56,10 @@ import com.example.cardealer2.utility.CustomerSearchableDropdown
 import com.example.cardealer2.utility.BrokerSearchableDropdown
 import com.example.cardealer2.utility.FilterableDropdownField
 import com.example.cardealer2.utility.DatePickerButton
+import com.example.cardealer2.components.PdfPickerField
 import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -68,13 +81,10 @@ fun AllTransactionsScreen(
     val emiOutstanding by viewModel.emiOutstanding.collectAsState()
     val creditOwedGroups by viewModel.creditOwedGroups.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
-    
-    // Load top 10 transactions when screen opens
-    LaunchedEffect(Unit) {
-        viewModel.loadTopTransactions()
-    }
-    
     val hasMoreTransactions by viewModel.hasMoreTransactions.collectAsState()
+    
+    // Note: Transactions are already loaded in ViewModel.init, so we don't need to load again
+    // This prevents duplicate loading and glitch effects
     
     // Customers and brokers list for transfer
     val customers by CustomerRepository.customers.collectAsState()
@@ -113,7 +123,7 @@ fun AllTransactionsScreen(
         }
     }
     
-    // Calculate FROM balance
+    // Calculate FROM balance (memoized to prevent recalculation)
     val fromBalance = remember(selectedFromType, selectedFromCustomer, selectedFromBroker, cashBalance, bankBalance) {
         when (selectedFromType) {
             "Customer" -> selectedFromCustomer?.amount?.toDouble() ?: 0.0
@@ -162,7 +172,7 @@ fun AllTransactionsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Transfer Card
-                item {
+                item(key = "transfer_card") {
                     TransferCard(
                         customers = customers,
                         brokers = brokers,
@@ -288,101 +298,17 @@ fun AllTransactionsScreen(
                 }
                 
                 // Transaction History Section
-                item {
+                item(key = "transaction_history") {
                     TransactionHistorySection(
                         transactions = transactions,
                         currencyFormatter = currencyFormatter,
                         navController = navController
                     )
                 }
-                
-                // Section A: Money Balance
-                item {
-                    SectionA_MoneyBalance(
-                        cashBalance = cashBalance ?: 0.0,
-                        bankBalance = bankBalance ?: 0.0,
-                        creditBalance = creditBalance ?: 0.0,
-                        isLoading = isLoadingBalances,
-                        currencyFormatter = currencyFormatter,
-                        onAdjustClick = { type -> showBalanceAdjustDialog = type },
-                        isExpanded = expandedSections.contains("A"),
-                        onToggleExpand = {
-                            expandedSections = if (expandedSections.contains("A")) {
-                                expandedSections - "A"
-                            } else {
-                                expandedSections + "A"
-                            }
-                        }
-                    )
-                }
-                
-                // Section B: Who gave me money
-                item {
-                    SectionB_MoneyReceived(
-                        moneyReceivedGroups = moneyReceivedGroups,
-                        currencyFormatter = currencyFormatter,
-                        isExpanded = expandedSections.contains("B"),
-                        onToggleExpand = {
-                            expandedSections = if (expandedSections.contains("B")) {
-                                expandedSections - "B"
-                            } else {
-                                expandedSections + "B"
-                            }
-                        }
-                    )
-                }
-                
-                // Section C: Whom did I give money to
-                item {
-                    SectionC_MoneyPaid(
-                        moneyPaidGroups = moneyPaidGroups,
-                        currencyFormatter = currencyFormatter,
-                        isExpanded = expandedSections.contains("C"),
-                        onToggleExpand = {
-                            expandedSections = if (expandedSections.contains("C")) {
-                                expandedSections - "C"
-                            } else {
-                                expandedSections + "C"
-                            }
-                        }
-                    )
-                }
-                
-                // Section D: Who owes me money
-                item {
-                    SectionD_EmiOutstanding(
-                        emiOutstanding = emiOutstanding,
-                        currencyFormatter = currencyFormatter,
-                        isExpanded = expandedSections.contains("D"),
-                        onToggleExpand = {
-                            expandedSections = if (expandedSections.contains("D")) {
-                                expandedSections - "D"
-                            } else {
-                                expandedSections + "D"
-                            }
-                        }
-                    )
-                }
-                
-                // Section E: Who do I owe money to
-                item {
-                    SectionE_CreditOwed(
-                        creditOwedGroups = creditOwedGroups,
-                        currencyFormatter = currencyFormatter,
-                        isExpanded = expandedSections.contains("E"),
-                        onToggleExpand = {
-                            expandedSections = if (expandedSections.contains("E")) {
-                                expandedSections - "E"
-                            } else {
-                                expandedSections + "E"
-                            }
-                        }
-                    )
-                }
-                
+
                 // Load More Button
                 if (hasMoreTransactions) {
-                    item {
+                    item(key = "load_more") {
                         Button(
                             onClick = { viewModel.loadMoreTransactions() },
                             modifier = Modifier
@@ -399,12 +325,81 @@ fun AllTransactionsScreen(
                         }
                     }
                 }
+                // Section A: Money Balance
+                item(key = "section_a") {
+                    SectionA_MoneyBalance(
+                        cashBalance = cashBalance ?: 0.0,
+                        bankBalance = bankBalance ?: 0.0,
+                        creditBalance = creditBalance ?: 0.0,
+                        isLoading = isLoadingBalances,
+                        currencyFormatter = currencyFormatter,
+                        onAdjustClick = { type -> showBalanceAdjustDialog = type },
+                        onEditAllClick = { showBalanceAdjustDialog = "ALL" },
+                        isExpanded = expandedSections.contains("A"),
+                        onToggleExpand = {
+                            expandedSections = if (expandedSections.contains("A")) {
+                                expandedSections - "A"
+                            } else {
+                                expandedSections + "A"
+                            }
+                        }
+                    )
+                }
+
+
             }
         }
     }
     
-    // Balance Adjustment Dialog
+    // Balance Edit Dialog - Shows all balances for direct editing
     showBalanceAdjustDialog?.let { type ->
+        if (type == "ALL") {
+            BalanceEditDialog(
+                cashBalance = cashBalance ?: 0.0,
+                bankBalance = bankBalance ?: 0.0,
+                creditBalance = creditBalance ?: 0.0,
+                currencyFormatter = currencyFormatter,
+                onDismiss = { showBalanceAdjustDialog = null },
+                onSave = { cash, bank, credit, description, reason ->
+                    // Save all balances
+                    var savedCount = 0
+                    val totalCount = 3
+                    
+                    fun checkComplete() {
+                        savedCount++
+                        if (savedCount == totalCount) {
+                            showBalanceAdjustDialog = null
+                        }
+                    }
+                    
+                    viewModel.setCapitalBalance(
+                        type = "Cash",
+                        newBalance = cash,
+                        description = description,
+                        reason = reason,
+                        onSuccess = { checkComplete() },
+                        onError = { checkComplete() }
+                    )
+                    viewModel.setCapitalBalance(
+                        type = "Bank",
+                        newBalance = bank,
+                        description = description,
+                        reason = reason,
+                        onSuccess = { checkComplete() },
+                        onError = { checkComplete() }
+                    )
+                    viewModel.setCapitalBalance(
+                        type = "Credit",
+                        newBalance = credit,
+                        description = description,
+                        reason = reason,
+                        onSuccess = { checkComplete() },
+                        onError = { checkComplete() }
+                    )
+                }
+            )
+        } else {
+            // Single balance edit dialog (direct editing)
         BalanceAdjustmentDialog(
             type = type,
             currentBalance = when (type) {
@@ -414,18 +409,20 @@ fun AllTransactionsScreen(
                 else -> 0.0
             },
             currencyFormatter = currencyFormatter,
-            onDismiss = { showBalanceAdjustDialog = null },
-            onAdjust = { amount, description, reason ->
-                viewModel.adjustCapitalBalance(
-                    type = type,
-                    amount = amount,
-                    description = description,
-                    reason = reason,
-                    onSuccess = { showBalanceAdjustDialog = null },
-                    onError = { /* Handle error */ }
-                )
-            }
+                onDismiss = { showBalanceAdjustDialog = null },
+                onAdjust = { newBalance, description, reason ->
+                    // newBalance is the direct value to set
+                    viewModel.setCapitalBalance(
+                        type = type,
+                        newBalance = newBalance,
+                        description = description,
+                        reason = reason,
+                        onSuccess = { showBalanceAdjustDialog = null },
+                        onError = { /* Handle error */ }
+                    )
+                }
         )
+        }
     }
     
     // Add Customer Dialog
@@ -464,35 +461,18 @@ fun AllTransactionsScreen(
     }
     
     // Add Broker Dialog
+    val scope = rememberCoroutineScope()
     if (showAddBrokerDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddBrokerDialog = false },
-            title = { TranslatedText("Add Broker") },
-            text = {
-                Column {
-                    val brokerNotFoundText = if (isPunjabiEnabled) {
-                        "${TranslationManager.translate("Broker", isPunjabiEnabled)} \"$addBrokerName\" ${TranslationManager.translate("not found.", isPunjabiEnabled)}"
-                    } else {
-                        "Broker \"$addBrokerName\" not found."
-                    }
-                    Text(brokerNotFoundText)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TranslatedText("Would you like to add this broker?")
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showAddBrokerDialog = false
-                        navController.navigate("add_broker")
-                    }
-                ) {
-                    TranslatedText("Add Broker")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddBrokerDialog = false }) {
-                    TranslatedText("Cancel")
+        AddBrokerDialogForTransactions(
+            onDismiss = { showAddBrokerDialog = false },
+            onAddSuccess = { name ->
+                addedBrokerName = name
+                addSuccess = true
+                // Reset success flag after a delay to allow BrokerSearchableDropdown to auto-select
+                scope.launch {
+                    kotlinx.coroutines.delay(1000)
+                    addSuccess = false
+                    addedBrokerName = null
                 }
             }
         )
@@ -508,6 +488,7 @@ fun SectionA_MoneyBalance(
     isLoading: Boolean,
     currencyFormatter: NumberFormat,
     onAdjustClick: (String) -> Unit,
+    onEditAllClick: () -> Unit,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit
 ) {
@@ -546,6 +527,18 @@ fun SectionA_MoneyBalance(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Edit All Button
+                    IconButton(onClick = onEditAllClick) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = TranslationManager.translate("Edit All Balances", isPunjabiEnabled),
+                            tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 IconButton(onClick = onToggleExpand) {
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -554,6 +547,7 @@ fun SectionA_MoneyBalance(
                         else 
                             TranslationManager.translate("Expand", isPunjabiEnabled)
                     )
+                    }
                 }
             }
             
@@ -1248,26 +1242,201 @@ fun getTransactionTypeLabel(type: String): String {
     }
 }
 
-// Balance Adjustment Dialog
+// Balance Edit Dialog - Direct editing of all balances
+@Composable
+fun BalanceEditDialog(
+    cashBalance: Double,
+    bankBalance: Double,
+    creditBalance: Double,
+    currencyFormatter: NumberFormat,
+    onDismiss: () -> Unit,
+    onSave: (Double, Double, Double, String, String?) -> Unit
+) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    
+    var cashText by remember { mutableStateOf(cashBalance.toString()) }
+    var bankText by remember { mutableStateOf(bankBalance.toString()) }
+    var creditText by remember { mutableStateOf(creditBalance.toString()) }
+    var description by remember { mutableStateOf(TranslationManager.translate("Manual Balance Edit", isPunjabiEnabled)) }
+    var reason by remember { mutableStateOf("") }
+    
+    val cashAmount = cashText.toDoubleOrNull() ?: 0.0
+    val bankAmount = bankText.toDoubleOrNull() ?: 0.0
+    val creditAmount = creditText.toDoubleOrNull() ?: 0.0
+    
+    val isValid = cashText.isNotBlank() && bankText.isNotBlank() && creditText.isNotBlank() &&
+            cashAmount >= 0 && bankAmount >= 0 && creditAmount >= 0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = TranslationManager.translate("Edit Balances", isPunjabiEnabled),
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                TranslatedText(
+                    englishText = "Enter the exact amounts for each balance type:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                // Cash Balance Input
+                OutlinedTextField(
+                    value = cashText,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            cashText = newValue
+                        }
+                    },
+                    label = { TranslatedText("Cash Balance *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Money,
+                            contentDescription = null,
+                            tint = Color(0xFF34A853)
+                        )
+                    },
+                    trailingIcon = {
+                        Text(
+                            text = "₹",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    )
+                )
+                
+                // Bank Balance Input
+                OutlinedTextField(
+                    value = bankText,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            bankText = newValue
+                        }
+                    },
+                    label = { TranslatedText("Bank Balance *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalance,
+                            contentDescription = null,
+                            tint = Color(0xFF4285F4)
+                        )
+                    },
+                    trailingIcon = {
+                        Text(
+                            text = "₹",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    )
+                )
+                
+                // Credit Balance Input
+                OutlinedTextField(
+                    value = creditText,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            creditText = newValue
+                        }
+                    },
+                    label = { TranslatedText("Credit Balance *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CreditCard,
+                            contentDescription = null,
+                            tint = Color(0xFFEA4335)
+                        )
+                    },
+                    trailingIcon = {
+                        Text(
+                            text = "₹",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    )
+                )
+                
+                HorizontalDivider()
+                
+                // Description Input
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { TranslatedText("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                
+                // Reason Input (Optional)
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { TranslatedText("Reason (Optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (isValid) {
+                        onSave(cashAmount, bankAmount, creditAmount, description, reason.takeIf { it.isNotBlank() })
+                    }
+                },
+                enabled = isValid
+            ) {
+                TranslatedText("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                TranslatedText("Cancel")
+            }
+        }
+    )
+}
+
+// Balance Adjustment Dialog - Direct editing (replaces add/subtract)
 @Composable
 fun BalanceAdjustmentDialog(
     type: String,
     currentBalance: Double,
     currencyFormatter: NumberFormat,
     onDismiss: () -> Unit,
-    onAdjust: (Double, String, String?) -> Unit
+    onAdjust: (Double, String, String?) -> Unit // Now expects newBalance, not difference
 ) {
     val context = LocalContext.current
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
     
-    var amountText by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf(TranslationManager.translate("Manual Adjustment", isPunjabiEnabled)) }
+    var balanceText by remember { mutableStateOf(currentBalance.toString()) }
+    var description by remember { mutableStateOf(TranslationManager.translate("Manual Balance Edit", isPunjabiEnabled)) }
     var reason by remember { mutableStateOf("") }
-    var isAdding by remember { mutableStateOf(true) }
     
-    val amount = amountText.toDoubleOrNull() ?: 0.0
-    val adjustmentAmount = if (isAdding) amount else -amount
+    val newBalance = balanceText.toDoubleOrNull() ?: 0.0
+    val isValid = balanceText.isNotBlank() && newBalance >= 0
     
     val typeTranslated = when(type) {
         "Cash" -> TranslationManager.translate("Cash", isPunjabiEnabled)
@@ -1275,13 +1444,13 @@ fun BalanceAdjustmentDialog(
         "Credit" -> TranslationManager.translate("Credit", isPunjabiEnabled)
         else -> type
     }
-    val adjustBalanceText = "${TranslationManager.translate("Adjust", isPunjabiEnabled)} $typeTranslated ${TranslationManager.translate("Balance", isPunjabiEnabled)}"
+    val editBalanceText = "${TranslationManager.translate("Edit", isPunjabiEnabled)} $typeTranslated ${TranslationManager.translate("Balance", isPunjabiEnabled)}"
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = adjustBalanceText,
+                text = editBalanceText,
                 style = MaterialTheme.typography.titleLarge
             )
         },
@@ -1312,31 +1481,16 @@ fun BalanceAdjustmentDialog(
                     }
                 }
                 
-                // Add/Subtract Toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = isAdding,
-                        onClick = { isAdding = true },
-                        label = { TranslatedText("Add") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = !isAdding,
-                        onClick = { isAdding = false },
-                        label = { TranslatedText("Subtract") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                
-                // Amount Input
+                // New Balance Input (Direct Edit)
                 OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = it },
-                    label = { TranslatedText("Amount *") },
-                    placeholder = { TranslatedText("Enter amount") },
+                    value = balanceText,
+                    onValueChange = { newValue ->
+                        if (newValue.isEmpty() || newValue.toDoubleOrNull() != null) {
+                            balanceText = newValue
+                        }
+                    },
+                    label = { TranslatedText("New Balance *") },
+                    placeholder = { TranslatedText("Enter new balance") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     leadingIcon = {
@@ -1344,7 +1498,10 @@ fun BalanceAdjustmentDialog(
                             text = "₹",
                             style = MaterialTheme.typography.bodyLarge
                         )
-                    }
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    )
                 )
                 
                 // Description Input
@@ -1365,27 +1522,36 @@ fun BalanceAdjustmentDialog(
                     singleLine = true
                 )
                 
-                // Preview New Balance
-                if (amount > 0) {
-                    val newBalance = currentBalance + adjustmentAmount
+                // Show difference if changed
+                if (newBalance != currentBalance) {
+                    val difference = newBalance - currentBalance
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            containerColor = if (difference > 0) 
+                                MaterialTheme.colorScheme.secondaryContainer 
+                            else 
+                                MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp)
                         ) {
                             TranslatedText(
-                                englishText = "New Balance",
+                                englishText = if (difference > 0) "Increase" else "Decrease",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = if (difference > 0) 
+                                    MaterialTheme.colorScheme.onSecondaryContainer 
+                                else 
+                                    MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
-                                text = currencyFormatter.format(newBalance),
+                                text = currencyFormatter.format(kotlin.math.abs(difference)),
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = if (difference > 0) 
+                                    MaterialTheme.colorScheme.onSecondaryContainer 
+                                else 
+                                    MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }
@@ -1395,13 +1561,14 @@ fun BalanceAdjustmentDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (amount > 0) {
-                        onAdjust(adjustmentAmount, description, reason.takeIf { it.isNotBlank() })
+                    if (isValid) {
+                        // Pass the new balance directly
+                        onAdjust(newBalance, description, reason.takeIf { it.isNotBlank() })
                     }
                 },
-                enabled = amount > 0
+                enabled = isValid
             ) {
-                TranslatedText("Adjust")
+                TranslatedText("Save")
             }
         },
         dismissButton = {
@@ -1525,82 +1692,38 @@ fun TransferCard(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // FROM Type Buttons - Fixed alignment
-                Row(
+                // FROM Type Buttons - LazyRow with natural sizing
+                val fromTypes = listOf("Customer", "Broker", "Cash", "Bank")
+                
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    FilterChip(
-                        selected = selectedFromType == "Customer",
-                        onClick = { onFromTypeSelected("Customer") },
-                        label = {
-                            TranslatedText(
-                                "Customer",
-                                style = MaterialTheme.typography.labelSmall
+                    items(fromTypes) { type ->
+                        FilterChip(
+                            selected = selectedFromType == type,
+                            onClick = { onFromTypeSelected(type) },
+                            label = {
+                                TranslatedText(
+                                    type,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            modifier = Modifier.wrapContentWidth(),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
-                    )
-                    FilterChip(
-                        selected = selectedFromType == "Broker",
-                        onClick = { onFromTypeSelected("Broker") },
-                        label = {
-                            TranslatedText(
-                                "Broker",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedFromType == "Cash",
-                        onClick = { onFromTypeSelected("Cash") },
-                        label = {
-                            TranslatedText(
-                                "Cash",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
-                    FilterChip(
-                        selected = selectedFromType == "Bank",
-                        onClick = { onFromTypeSelected("Bank") },
-                        label = {
-                            TranslatedText(
-                                "Bank",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    )
+                    }
                 }
 
                 // FROM Customer/Broker Dropdown
                 AnimatedVisibility(
                     visible = selectedFromType == "Customer",
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                    exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
                 ) {
             CustomerSearchableDropdown(
                         label = TranslationManager.translate("Select Customer", isPunjabiEnabled),
@@ -1616,8 +1739,8 @@ fun TransferCard(
 
                 AnimatedVisibility(
                     visible = selectedFromType == "Broker",
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                    exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
                 ) {
                     BrokerSearchableDropdown(
                         label = TranslationManager.translate("Select Broker", isPunjabiEnabled),
@@ -1634,8 +1757,8 @@ fun TransferCard(
                 // FROM Balance Display - With Red/Green Colors
                 AnimatedVisibility(
                     visible = selectedFromType != null,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
+                    enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                    exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
                 ) {
                     val icon = when (selectedFromType) {
                         "Bank" -> Icons.Default.AccountBalance
@@ -1708,8 +1831,8 @@ fun TransferCard(
             // Compact Arrow Divider
             AnimatedVisibility(
                 visible = selectedFromType != null,
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut()
+                enter = fadeIn(animationSpec = tween(200)) + scaleIn(animationSpec = spring(dampingRatio = 0.8f)),
+                exit = fadeOut(animationSpec = tween(150)) + scaleOut(animationSpec = spring(dampingRatio = 0.8f))
             ) {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -1733,8 +1856,8 @@ fun TransferCard(
             // TO Section - Compact
             AnimatedVisibility(
                 visible = selectedFromType != null,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1775,8 +1898,8 @@ fun TransferCard(
                     // TO Customer/Broker Dropdown
                     AnimatedVisibility(
                         visible = selectedToType == "Customer",
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                        exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
                     ) {
                         CustomerSearchableDropdown(
                             label = TranslationManager.translate("Select Customer", isPunjabiEnabled),
@@ -1792,8 +1915,8 @@ fun TransferCard(
 
                     AnimatedVisibility(
                         visible = selectedToType == "Broker",
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
+                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = spring(dampingRatio = 0.8f)),
+                        exit = fadeOut(animationSpec = tween(150)) + shrinkVertically(animationSpec = spring(dampingRatio = 0.8f))
                     ) {
                         BrokerSearchableDropdown(
                             label = TranslationManager.translate("Select Broker", isPunjabiEnabled),
@@ -2012,8 +2135,10 @@ fun TransactionHistorySection(
         return
     }
     
-    // Group transactions by date
-    val groupedByDate = transactions.groupBy { it.date }
+    // Group transactions by date (memoized to prevent recalculation)
+    val groupedByDate = remember(transactions) {
+        transactions.groupBy { it.date }
+    }
     
     Card(
         modifier = Modifier
@@ -2047,25 +2172,28 @@ fun TransactionHistorySection(
             Spacer(modifier = Modifier.height(16.dp))
             
             // Grouped transactions by date (sorted by date descending, then by createdAt descending within each date)
-            groupedByDate.toList()
-                .sortedByDescending { it.first }
-                .forEach { (date, dateTransactions) ->
-                    DateGroupHeader(date = date, count = dateTransactions.size)
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    // Sort transactions within the date group by createdAt descending (latest first)
-                    dateTransactions
-                        .sortedByDescending { it.createdAt }
-                        .forEach { transaction ->
-                            TransactionCard(
-                                transaction = transaction,
-                                currencyFormatter = currencyFormatter,
-                                navController = navController
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
+            val sortedDateGroups = remember(groupedByDate) {
+                groupedByDate.toList().sortedByDescending { it.first }
+            }
+            sortedDateGroups.forEach { (date, dateTransactions) ->
+                // Sort transactions within the date group by createdAt descending (latest first)
+                val sortedTransactions = dateTransactions.sortedByDescending { it.createdAt }
+                
+                DateGroupHeader(date = date, count = dateTransactions.size)
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                sortedTransactions.forEachIndexed { index, transaction ->
+                    TransactionCard(
+                        transaction = transaction,
+                        currencyFormatter = currencyFormatter,
+                        navController = navController
+                    )
+                    if (index < sortedTransactions.size - 1) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                 }
+            }
         }
     }
 }
@@ -2335,6 +2463,219 @@ fun TransactionCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Add Broker Dialog for Transactions Screen
+@Composable
+fun AddBrokerDialogForTransactions(
+    onDismiss: () -> Unit,
+    onAddSuccess: (String) -> Unit = {}
+) {
+    val context = LocalContext.current
+    val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
+        .collectAsState(initial = false)
+    val scope = rememberCoroutineScope()
+    
+    // Dialog state
+    var brokerName by rememberSaveable { mutableStateOf("") }
+    var phoneNumber by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable { mutableStateOf("") }
+    var idProof by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var brokerBill by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var amount by rememberSaveable { mutableStateOf("") }
+    
+    // Loading and error state
+    var isAddingBroker by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    Dialog(
+        onDismissRequest = { onDismiss() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 700.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Dialog Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TranslatedText(
+                        englishText = "Add New Broker",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = TranslationManager.translate("Close", isPunjabiEnabled),
+                            modifier = Modifier.rotate(45f)
+                        )
+                    }
+                }
+                
+                Divider()
+                
+                // Form Fields
+                OutlinedTextField(
+                    value = brokerName,
+                    onValueChange = { brokerName = it },
+                    label = { TranslatedText("Broker Name *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isAddingBroker
+                )
+                
+                OutlinedTextField(
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it },
+                    label = { TranslatedText("Phone Number *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    enabled = !isAddingBroker
+                )
+                
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { TranslatedText("Address *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    enabled = !isAddingBroker
+                )
+                
+                HorizontalDivider()
+                
+                TranslatedText(
+                    englishText = "ID Proof",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                PdfPickerField(
+                    label = TranslationManager.translate("ID Proof PDFs", isPunjabiEnabled),
+                    pdfUrls = idProof,
+                    onPdfChange = { idProof = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                HorizontalDivider()
+                
+                TranslatedText(
+                    englishText = "Broker Bill",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                PdfPickerField(
+                    label = TranslationManager.translate("Broker Bill PDFs", isPunjabiEnabled),
+                    pdfUrls = brokerBill,
+                    onPdfChange = { brokerBill = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                HorizontalDivider()
+                
+                TranslatedText(
+                    englishText = "Broker Amount",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { TranslatedText("Broker Fee Amount") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !isAddingBroker
+                )
+                
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isAddingBroker
+                    ) {
+                        TranslatedText("Cancel")
+                    }
+                    
+                    Button(
+                        onClick = {
+                            if (brokerName.isBlank() || phoneNumber.isBlank() || address.isBlank()) {
+                                errorMessage = TranslationManager.translate("Please fill in all required fields", isPunjabiEnabled)
+                                return@Button
+                            }
+                            
+                            isAddingBroker = true
+                            errorMessage = null
+                            
+                            scope.launch {
+                                try {
+                                    val broker = Broker(
+                                        brokerId = "",
+                                        name = brokerName.trim(),
+                                        phoneNumber = phoneNumber.trim(),
+                                        idProof = idProof,
+                                        address = address.trim(),
+                                        brokerBill = brokerBill,
+                                        amount = amount.toIntOrNull() ?: 0,
+                                        createdAt = System.currentTimeMillis()
+                                    )
+                                    
+                                    val result = BrokerRepository.addBroker(broker)
+                                    if (result.isSuccess) {
+                                        onAddSuccess(brokerName)
+                                        onDismiss()
+                                    } else {
+                                        errorMessage = result.exceptionOrNull()?.message ?: TranslationManager.translate("Failed to add broker", isPunjabiEnabled)
+                                        isAddingBroker = false
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = e.message ?: TranslationManager.translate("An unexpected error occurred", isPunjabiEnabled)
+                                    isAddingBroker = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isAddingBroker && brokerName.isNotBlank() && phoneNumber.isNotBlank() && address.isNotBlank()
+                    ) {
+                        if (isAddingBroker) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            TranslatedText("Add")
+                        }
                     }
                 }
             }

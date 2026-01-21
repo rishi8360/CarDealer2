@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModelProvider
@@ -41,6 +43,7 @@ import com.example.cardealer2.screens.broker.BrokerDetailsScreen
 import com.example.cardealer2.screens.broker.EditBrokerDetails
 import com.example.cardealer2.ViewModel.ViewBrokersViewModel
 import com.example.cardealer2.ViewModel.SettingsViewModel
+import com.example.cardealer2.ViewModel.LedgerViewModel
 import com.example.cardealer2.screens.SplashScreen
 import com.example.cardealer2.screens.SettingsScreen
 import com.example.cardealer2.ui.theme.CarDealer2Theme
@@ -63,6 +66,31 @@ class MainActivity : ComponentActivity() {
 }
 
 
+// Helper function to create default slide-in/slide-out animations
+fun slideInFromRight() = slideInHorizontally(
+    initialOffsetX = { fullWidth -> fullWidth },
+    animationSpec = tween(300)
+)
+
+fun slideOutToLeft() = slideOutHorizontally(
+    targetOffsetX = { fullWidth -> -fullWidth },
+    animationSpec = tween(300)
+)
+
+fun slideInFromLeft() = slideInHorizontally(
+    initialOffsetX = { fullWidth -> -fullWidth },
+    animationSpec = tween(300)
+)
+
+fun slideOutToRight() = slideOutHorizontally(
+    targetOffsetX = { fullWidth -> fullWidth },
+    animationSpec = tween(300)
+)
+
+// Fade animations for splash screen
+fun fadeInTransition() = fadeIn(animationSpec = tween(300))
+fun fadeOutTransition() = fadeOut(animationSpec = tween(300))
+
 @SuppressLint("UnrememberedGetBackStackEntry")
 @Composable
 fun AppNav() {
@@ -72,8 +100,14 @@ fun AppNav() {
         navController = navController,
         startDestination = "splash"
     ) {
-        // Splash Screen
-        composable("splash") {
+        // Splash Screen - Fade animation
+        composable(
+            route = "splash",
+            enterTransition = { fadeInTransition() },
+            exitTransition = { fadeOutTransition() },
+            popEnterTransition = { fadeInTransition() },
+            popExitTransition = { fadeOutTransition() }
+        ) {
             val settingsViewModel: SettingsViewModel = viewModel()
             SplashScreen(
                 navController = navController,
@@ -81,14 +115,24 @@ fun AppNav() {
             )
         }
         
-        composable("home") {
+        composable(
+            route = "home",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             val homeViewModel: HomeScreenViewModel = viewModel()
             HomeScreen(navController = navController, viewModel = homeViewModel)
         }
 
         composable(
             route = "brand_selected/{brandId}",
-            arguments = listOf(navArgument("brandId") { type = NavType.StringType })
+            arguments = listOf(navArgument("brandId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val brandId = backStackEntry.arguments?.getString("brandId") ?: ""
 
@@ -116,7 +160,11 @@ fun AppNav() {
             arguments = listOf(
                 navArgument("productId") { type = NavType.StringType },
                 navArgument("brandId") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId") ?: ""
             val brandId = backStackEntry.arguments?.getString("brandId") ?: ""
@@ -136,7 +184,11 @@ fun AppNav() {
             route = "vehicle_detail/{chassisNumber}",
             arguments = listOf(
                 navArgument("chassisNumber") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val chassisNumber = backStackEntry.arguments?.getString("chassisNumber") ?: ""
 
@@ -164,8 +216,12 @@ fun AppNav() {
 
 
         composable(
-            "edit_vehicle/{chassisNumber}",
-            arguments = listOf(navArgument("chassisNumber") { type = NavType.StringType })
+            route = "edit_vehicle/{chassisNumber}",
+            arguments = listOf(navArgument("chassisNumber") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val chassisNumber = backStackEntry.arguments?.getString("chassisNumber") ?: ""
 
@@ -187,10 +243,14 @@ fun AppNav() {
         }
 
         composable(
-            "add_vehicle/{brandId}",
+            route = "add_vehicle/{brandId}",
             arguments = listOf(
                 navArgument("brandId") { type = NavType.StringType }
-            )
+            ),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val brandId = backStackEntry.arguments?.getString("brandId") ?: ""
 
@@ -206,15 +266,31 @@ fun AppNav() {
             AddBrandVehicleScreen(brandId = brandId, navController = navController,homeScreenViewModel=homeScreenViewModel,)
 
         }
-        composable("add_customer") {backStackEntry->
+        composable(
+            route = "add_customer",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {backStackEntry->
                AddCustomerScreen(navController = navController)
         }
-        composable("view_customer") {
+        composable(
+            route = "view_customer",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             ViewCustomerScreen(navController = navController)
         }
         composable(
             route = "customer_detail/{customerId}",
-            arguments = listOf(navArgument("customerId") { type = NavType.StringType })
+            arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
 
@@ -236,7 +312,11 @@ fun AppNav() {
 
         composable(
             route = "edit_customer/{customerId}",
-            arguments = listOf(navArgument("customerId") { type = NavType.StringType })
+            arguments = listOf(navArgument("customerId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
             EditCustomerDetails(
@@ -245,7 +325,13 @@ fun AppNav() {
             )
         }
 
-        composable("catalog_selection") { backStackEntry ->
+        composable(
+            route = "catalog_selection",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) { backStackEntry ->
             val parentEntry = remember(backStackEntry) {
                 runCatching { navController.getBackStackEntry("home") }.getOrNull()
             }
@@ -267,7 +353,11 @@ fun AppNav() {
                 navArgument("pdfPath") {
                     type = NavType.StringType
                 }
-            )
+            ),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val pdfPath = backStackEntry.arguments?.getString("pdfPath") ?: ""
             val decodedPath = try {
@@ -304,7 +394,13 @@ fun AppNav() {
         }
 
         // Purchase Vehicle Screen
-        composable("purchase_vehicle") { backStackEntry ->
+        composable(
+            route = "purchase_vehicle",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) { backStackEntry ->
             val parentEntry = remember(backStackEntry) {
                 runCatching { navController.getBackStackEntry("home") }.getOrNull()
             }
@@ -323,7 +419,11 @@ fun AppNav() {
         // Sell Vehicle Screen
         composable(
             route = "sell_vehicle/{chassisNumber}",
-            arguments = listOf(navArgument("chassisNumber") { type = NavType.StringType })
+            arguments = listOf(navArgument("chassisNumber") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val chassisNumber = backStackEntry.arguments?.getString("chassisNumber") ?: ""
             
@@ -334,7 +434,13 @@ fun AppNav() {
         }
 
         // View Broker Screen
-        composable("view_broker") {
+        composable(
+            route = "view_broker",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             ViewBrokerScreen(
                 navController = navController
             )
@@ -343,7 +449,11 @@ fun AppNav() {
         // Broker Detail Screen
         composable(
             route = "broker_detail/{brokerId}",
-            arguments = listOf(navArgument("brokerId") { type = NavType.StringType })
+            arguments = listOf(navArgument("brokerId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val brokerId = backStackEntry.arguments?.getString("brokerId") ?: ""
             
@@ -366,7 +476,11 @@ fun AppNav() {
         // Edit Broker Screen
         composable(
             route = "edit_broker/{brokerId}",
-            arguments = listOf(navArgument("brokerId") { type = NavType.StringType })
+            arguments = listOf(navArgument("brokerId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val brokerId = backStackEntry.arguments?.getString("brokerId") ?: ""
             
@@ -387,14 +501,26 @@ fun AppNav() {
         }
 
         // EMI Due Screen
-        composable("emi_due") {
+        composable(
+            route = "emi_due",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             EmiDueScreen(
                 navController = navController
             )
         }
 
         // All Transactions Screen
-        composable("all_transactions") {
+        composable(
+            route = "all_transactions",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             AllTransactionsScreen(
                 navController = navController
             )
@@ -403,17 +529,41 @@ fun AppNav() {
         // Transaction Detail Screen
         composable(
             route = "transaction_detail/{transactionId}",
-            arguments = listOf(navArgument("transactionId") { type = NavType.StringType })
+            arguments = listOf(navArgument("transactionId") { type = NavType.StringType }),
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
         ) { backStackEntry ->
             val transactionId = backStackEntry.arguments?.getString("transactionId") ?: ""
+            
+            // IMPORTANT: Share the same LedgerViewModel instance as `all_transactions`.
+            // Otherwise, deleting a transaction inside details refreshes only that screen's VM,
+            // and the list screen (which fetches once, no listener) won't update.
+            val parentEntry = remember(backStackEntry) {
+                runCatching { navController.getBackStackEntry("all_transactions") }.getOrNull()
+            }
+            val ledgerVm: LedgerViewModel = if (parentEntry != null) {
+                ViewModelProvider(parentEntry)[LedgerViewModel::class.java]
+            } else {
+                viewModel(backStackEntry)
+            }
+
             TransactionDetailScreen(
                 navController = navController,
-                transactionId = transactionId
+                transactionId = transactionId,
+                viewModel = ledgerVm
             )
         }
 
         // Settings Screen
-        composable("settings") {
+        composable(
+            route = "settings",
+            enterTransition = { slideInFromRight() },
+            exitTransition = { slideOutToLeft() },
+            popEnterTransition = { slideInFromLeft() },
+            popExitTransition = { slideOutToRight() }
+        ) {
             val settingsViewModel: SettingsViewModel = viewModel()
             SettingsScreen(
                 navController = navController,

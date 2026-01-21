@@ -1137,7 +1137,12 @@ object VehicleRepository {
                 val brandSnapshot = transaction.get(brandDocRef)
                 val currentVehicles = brandSnapshot.get("vehicle") as? List<Map<String, Any>> ?: emptyList()
 
-                val existingVehicleIndex = currentVehicles.indexOfFirst { it["productId"] == product.productId }
+                // Match by productId + type (so different types of the same model are tracked separately)
+                // Normalize both sides to lowercase to handle case inconsistencies
+                val existingVehicleIndex = currentVehicles.indexOfFirst { vehicle ->
+                    (vehicle["productId"] as? String) == product.productId &&
+                        (vehicle["type"] as? String)?.lowercase() == product.type.lowercase()
+                }
 
                 if (existingVehicleIndex != -1) {
                     val updatedVehicles = currentVehicles.toMutableList()
@@ -1146,6 +1151,7 @@ object VehicleRepository {
 
                     if (currentQuantity > 1) {
                         existingVehicle["quantity"] = currentQuantity - 1
+                        existingVehicle["type"] = product.type.lowercase() // Normalize type to lowercase
                         updatedVehicles[existingVehicleIndex] = existingVehicle
                     } else {
                         updatedVehicles.removeAt(existingVehicleIndex)
@@ -1241,19 +1247,25 @@ object VehicleRepository {
                 val currentVehicles =
                     brandSnapshot.get("vehicle") as? List<Map<String, Any>> ?: emptyList()
 
-                val existingVehicleIndex = currentVehicles.indexOfFirst { it["productId"] == product.productId }
+                // Match by productId + type (so different types of the same model are tracked separately)
+                // Normalize both sides to lowercase to handle case inconsistencies
+                val existingVehicleIndex = currentVehicles.indexOfFirst { vehicle ->
+                    (vehicle["productId"] as? String) == product.productId &&
+                        (vehicle["type"] as? String)?.lowercase() == product.type.lowercase()
+                }
 
                 val updatedVehicles = currentVehicles.toMutableList()
                 if (existingVehicleIndex != -1) {
                     val existingVehicle = updatedVehicles[existingVehicleIndex].toMutableMap()
                     val currentQuantity = (existingVehicle["quantity"] as? Long)?.toInt() ?: 1
                     existingVehicle["quantity"] = currentQuantity + 1
+                    existingVehicle["type"] = product.type.lowercase() // Normalize type to lowercase
                     updatedVehicles[existingVehicleIndex] = existingVehicle
                 } else {
                 val newVehicle = hashMapOf(
                         "imageUrl" to (imageUrls.firstOrNull()?: "https://example.com/default_image.png"),
                         "productId" to product.productId,
-                        "type" to product.type,
+                        "type" to product.type.lowercase(), // Ensure lowercase when storing
                         "quantity" to 1
                     )
                     updatedVehicles.add(newVehicle)
@@ -1338,7 +1350,7 @@ object VehicleRepository {
     private fun HashMap<String, String?>.toVehicleSummary(): VehicleSummary {
         return VehicleSummary(
             productId = this["productId"] as? String ?: "",
-            type = this["type"] as? String ?: "",
+            type = (this["type"] as? String ?: "").lowercase(), // Normalize to lowercase
             imageUrl = this["imageUrl"] as? String ?: ""
         )
     }

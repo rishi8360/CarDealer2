@@ -13,11 +13,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.cardealer2.ViewModel.SellVehicleViewModel
+import com.example.cardealer2.ViewModel.LedgerViewModel
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Product
 import com.example.cardealer2.utility.ConsistentTopAppBar
@@ -25,7 +27,12 @@ import com.example.cardealer2.utility.CustomerSearchableDropdown
 import com.example.cardealer2.utility.DatePickerButton
 import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
+import com.example.cardealer2.utils.TransactionBillGenerator
+import com.example.cardealer2.screens.transactions.PrintBillDialog
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,26 +57,56 @@ fun SellVehicleScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val success by viewModel.success.collectAsState()
+    val createdTransaction by viewModel.createdTransaction.collectAsState()
     val nocHandedOver by viewModel.nocHandedOver.collectAsState()
     val rcHandedOver by viewModel.rcHandedOver.collectAsState()
     val insuranceHandedOver by viewModel.insuranceHandedOver.collectAsState()
     val otherDocsHandedOver by viewModel.otherDocsHandedOver.collectAsState()
     
     var showPaymentTypeDialog by remember { mutableStateOf(false) }
+    var showBillDialog by remember { mutableStateOf(false) }
+    var billRelatedData by remember { mutableStateOf<TransactionBillGenerator.BillRelatedData?>(null) }
+    var isLoadingBillData by remember { mutableStateOf(false) }
+    
+    val ledgerViewModel: LedgerViewModel = viewModel()
+    val scope = rememberCoroutineScope()
     
     // Load vehicle on screen start
     LaunchedEffect(chassisNumber) {
         viewModel.loadVehicle(chassisNumber)
     }
-    
-    // Show success dialog and navigate back
-    LaunchedEffect(success) {
-        if (success) {
-            navController.popBackStack()
+    val context = LocalContext.current
+
+    // Show bill dialog when transaction succeeds
+    LaunchedEffect(success, createdTransaction) {
+        if (success && createdTransaction != null && !showBillDialog) {
+            // Fetch related data for bill generation
+            isLoadingBillData = true
+            scope.launch {
+                try {
+                    val relatedDataResult = withContext(Dispatchers.IO) {
+                        ledgerViewModel.fetchBillRelatedData(context, createdTransaction!!)
+                    }
+                    relatedDataResult.fold(
+                        onSuccess = { relatedData ->
+                            billRelatedData = relatedData
+                            isLoadingBillData = false
+                            showBillDialog = true
+                        },
+                        onFailure = { error ->
+                            // If fetching related data fails, still show dialog (user can generate bill manually later)
+                            isLoadingBillData = false
+                            showBillDialog = true
+                        }
+                    )
+                } catch (e: Exception) {
+                    isLoadingBillData = false
+                    showBillDialog = true
+                }
+            }
         }
     }
     
-    val context = LocalContext.current
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
     
@@ -268,7 +305,11 @@ fun SellVehicleScreen(
                                 label = { TranslatedText("Note (Optional)") },
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 3,
-                                leadingIcon = { Icon(Icons.Outlined.Description, null) }
+                                leadingIcon = { Icon(Icons.Outlined.Description, null) },
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Text,
+                                    capitalization = KeyboardCapitalization.Words
+                                )
                             )
                             
                             Spacer(modifier = Modifier.height(16.dp))
@@ -326,6 +367,19 @@ fun SellVehicleScreen(
                 showPaymentTypeDialog = false
             },
             onDismiss = { showPaymentTypeDialog = false }
+        )
+    }
+    
+    // Bill Generation Dialog
+    if (showBillDialog && createdTransaction != null && billRelatedData != null) {
+        PrintBillDialog(
+            transaction = createdTransaction!!,
+            relatedData = billRelatedData!!,
+            onDismiss = {
+                showBillDialog = false
+                // Navigate back after dialog is dismissed
+                navController.popBackStack()
+            }
         )
     }
 }

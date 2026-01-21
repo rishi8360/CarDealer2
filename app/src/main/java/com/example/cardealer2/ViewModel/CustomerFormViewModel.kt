@@ -175,30 +175,34 @@ class CustomerFormViewModel(
         var isValid = true
         val errors = mutableMapOf<String, String>()
 
-        if (name.isBlank()) { errors["name"] = "Customer name is required"; isValid = false }
-        else if (name.trim().length < 2) { errors["name"] = "Name must be at least 2 characters"; isValid = false }
+        // Name validation - REQUIRED
+        if (name.isBlank()) { 
+            errors["name"] = "Customer name is required"; 
+            isValid = false 
+        } else if (name.trim().length < 2) { 
+            errors["name"] = "Name must be at least 2 characters"; 
+            isValid = false 
+        }
 
-        if (phone.isBlank()) { errors["phone"] = "Phone number is required"; isValid = false }
-        else if (!phone.trim().matches(Regex("^[0-9]{10}$"))) { errors["phone"] = "Phone number must be 10 digits"; isValid = false }
+        // Phone validation - OPTIONAL, but if provided must be 10 digits
+        if (phone.isNotBlank() && !phone.trim().matches(Regex("^[0-9]{10}$"))) { 
+            errors["phone"] = "Phone number must be 10 digits"; 
+            isValid = false 
+        }
 
-        if (address.isBlank()) { errors["address"] = "Address is required"; isValid = false }
-        else if (address.trim().length < 10) { errors["address"] = "Address must be at least 10 characters"; isValid = false }
-
-        if (idProofType.isBlank()) { errors["idProofType"] = "ID proof type is required"; isValid = false }
-
-        if (idProofNumber.isBlank()) { errors["idProofNumber"] = "ID proof number is required"; isValid = false }
-        else if (idProofNumber.trim().length < 5) { errors["idProofNumber"] = "ID proof number must be at least 5 characters"; isValid = false }
-
-        if (idProofImageUrls.isEmpty()) { errors["idProofImage"] = "Please select at least one ID proof document"; isValid = false }
+        // Address validation - REMOVED (no validation)
+        // ID Proof Type validation - REMOVED (no validation)
+        // ID Proof Number validation - REMOVED (no validation)
+        // ID Proof Image validation - REMOVED (no validation)
 
         _uiState.value = _uiState.value.copy(
             nameError = errors["name"],
             phoneError = errors["phone"],
-            addressError = errors["address"],
+            addressError = null, // No validation
             photoError = errors["photo"],
-            idProofTypeError = errors["idProofType"],
-            idProofNumberError = errors["idProofNumber"],
-            idProofImageError = errors["idProofImage"],
+            idProofTypeError = null, // No validation
+            idProofNumberError = null, // No validation
+            idProofImageError = null, // No validation
             amountError = errors["amount"]
         )
         return isValid

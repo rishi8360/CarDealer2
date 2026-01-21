@@ -162,18 +162,83 @@ fun CatalogSelectionScreen(
                         }
                     }
                     
-                    if (currentView is CatalogView.BrandSelection && totalSelected > 0) {
-                        TextButton(
-                            onClick = { catalogViewModel.clearAllSelections() }
-                        ) {
-                            TranslatedText("Clear All")
+                    // Clear All button - shown when there are selections
+                    when (currentView) {
+                        is CatalogView.BrandSelection -> {
+                            if (totalSelected > 0) {
+                                TextButton(
+                                    onClick = { catalogViewModel.clearAllSelections() }
+                                ) {
+                                    TranslatedText("Clear All")
+                                }
+                            }
                         }
-
+                        is CatalogView.VehicleSelection -> {
+                            val selectedCount = catalogViewModel.getSelectedVehiclesForBrand(selectedBrandForVehicles?.brandId ?: "").size
+                            if (selectedCount > 0) {
+                                TextButton(
+                                    onClick = {
+                                        selectedBrandForVehicles?.brandId?.let { brandId ->
+                                            catalogViewModel.clearVehiclesForBrand(brandId)
+                                        }
+                                    }
+                                ) {
+                                    TranslatedText("Clear All")
+                                }
+                            }
+                        }
+                        is CatalogView.IndividualVehicleSelection -> {
+                            if (catalogState.selectedIndividualVehicles.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { catalogViewModel.clearIndividualVehicleSelections() }
+                                ) {
+                                    TranslatedText("Clear All")
+                                }
+                            }
+                        }
+                        is CatalogView.PriceEditing -> {
+                            // No clear all for price editing
+                        }
+                        is CatalogView.RecipientNameEntry -> {
+                            // No clear all for recipient entry
+                        }
                     }
-                    TextButton(
-                        onClick = { catalogViewModel.selectAllBrands() }
-                    ) {
-                        TranslatedText("Select All")
+                    
+                    // Select All button - different behavior for each screen
+                    when (currentView) {
+                        is CatalogView.BrandSelection -> {
+                            TextButton(
+                                onClick = { catalogViewModel.selectAllBrands() }
+                            ) {
+                                TranslatedText("Select All")
+                            }
+                        }
+                        is CatalogView.VehicleSelection -> {
+                            selectedBrandForVehicles?.let { brand ->
+                                TextButton(
+                                    onClick = { catalogViewModel.selectAllVehiclesForBrand(brand.brandId) }
+                                ) {
+                                    TranslatedText("Select All")
+                                }
+                            }
+                        }
+                        is CatalogView.IndividualVehicleSelection -> {
+                            TextButton(
+                                onClick = { catalogViewModel.selectAllFilteredIndividualVehicles() }
+                            ) {
+                                TranslatedText("Select All")
+                            }
+                        }
+                        is CatalogView.PriceEditing -> {
+                            TextButton(
+                                onClick = { catalogViewModel.resetAllPricesToOriginal() }
+                            ) {
+                                TranslatedText("Reset All Prices")
+                            }
+                        }
+                        is CatalogView.RecipientNameEntry -> {
+                            // No select all for recipient entry
+                        }
                     }
                 }
             )
@@ -807,7 +872,6 @@ sealed class CatalogView {
     object PriceEditing : CatalogView()
     object RecipientNameEntry : CatalogView()
 }
-
 @Composable
 fun SelectableBrandCard(
     brand: Brand,
@@ -818,124 +882,177 @@ fun SelectableBrandCard(
     val context = LocalContext.current
     val isPunjabiEnabled by TranslationManager.isPunjabiEnabled(context)
         .collectAsState(initial = false)
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 8.dp else 4.dp
+            defaultElevation = if (isSelected) 6.dp else 2.dp
         ),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer
             else MaterialTheme.colorScheme.surface
         ),
-        border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null
+        border = if (isSelected)
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Logo container
-            Surface(
+            // Logo container with fixed aspect ratio
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(90.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    .aspectRatio(16f / 9f),
+                contentAlignment = Alignment.Center
             ) {
-                if (brand.logo.isNotEmpty()) {
-                    AsyncImage(
-                        model = brand.logo,
-                        contentDescription = brand.brandId,
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (brand.logo.isNotEmpty()) {
+                            AsyncImage(
+                                model = brand.logo,
+                                contentDescription = brand.brandId,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        } else {
+                            // Placeholder icon when no logo
+                            Icon(
+                                imageVector = Icons.Default.DirectionsCar,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                }
+
+                // Selected indicator badge
+                if (isSelected) {
+                    Surface(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp),
-                        contentScale = ContentScale.Fit
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-4).dp, y = 4.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        shadowElevation = 2.dp
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = TranslationManager.translate("Selected", isPunjabiEnabled),
+                            modifier = Modifier
+                                .size(28.dp)
+                                .padding(4.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Brand name
+            Text(
+                text = brand.brandId.uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = if (isSelected)
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                else
+                    MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Models count badge
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "${brand.vehicle.size} ${TranslationManager.translate("models", isPunjabiEnabled)}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Brand info
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = brand.brandId.uppercase(Locale.getDefault()),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                    ) {
-                        val modelsText = "${brand.vehicle.size} ${TranslationManager.translate("models", isPunjabiEnabled)}"
-                        Text(
-                            text = modelsText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
-
-                    if (isSelected) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = TranslationManager.translate("Selected", isPunjabiEnabled),
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // View button - full width at bottom
-            FilledTonalButton(
+            // View vehicles button
+            Button(
                 onClick = {
                     onViewVehicles()
                 },
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(vertical = 12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    ,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimary
+                    else
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                )
             ) {
-                Icon(
-                    Icons.Default.Visibility,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                TranslatedText(
-                    "View Vehicles",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TranslatedText(
+                        "Models",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
 }
-
 @Composable
 fun SelectableVehicleCard(
     vehicle: VehicleSummary,
@@ -982,7 +1099,7 @@ fun SelectableVehicleCard(
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    val icon = if (vehicle.type.equals("car", true))
+                    val icon = if (vehicle.type.lowercase() == "car")
                         Icons.Default.DirectionsCar
                     else
                         Icons.Default.TwoWheeler
@@ -1192,7 +1309,7 @@ fun IndividualVehicleSelectionCard(
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    val icon = if (product.type.equals("car", true))
+                    val icon = if (product.type.lowercase() == "car")
                         Icons.Default.DirectionsCar
                     else
                         Icons.Default.TwoWheeler
@@ -1348,7 +1465,7 @@ fun PriceEditingCard(
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    val icon = if (product.type.equals("car", true))
+                    val icon = if (product.type.lowercase() == "car")
                         Icons.Default.DirectionsCar
                     else
                         Icons.Default.TwoWheeler

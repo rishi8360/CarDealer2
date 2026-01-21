@@ -35,95 +35,82 @@ object CatalogHtmlTemplate {
             box-sizing: border-box;
         }
         
+        /* A4 Paper: 210mm × 297mm = 595px × 842px at 72 DPI */
         @page {
             size: A4;
-            margin: 0;
+            margin: 15mm; /* Standard margins */
         }
         
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
-            max-width: 100%;
             overflow-x: hidden;
-            overflow-y: visible;
         }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #fafafa;
             color: #1a1a1a;
-            width: 100%;
-            max-width: 100%;
-            padding: 0;
-            margin: 0;
-            overflow-x: hidden;
-            overflow-y: visible;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            line-height: 1.4;
         }
         
         .page-container {
             width: 100%;
             max-width: 1200px;
-            padding: 16px;
-            min-height: 100vh;
-            box-sizing: border-box;
+            padding: 20px;
             margin: 0 auto;
             background: #fafafa;
         }
         
-        @media screen and (max-width: 768px) {
-            .page-container {
-                padding: 12px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .page-container {
-                padding: 8px;
-            }
-        }
-        
-        /* PDF-specific styles (for print/PDF generation) */
+        /* PDF/Print-specific optimizations */
         @media print {
             html, body {
-                width: 595px !important;
-                max-width: 595px !important;
+                width: 210mm;
+                height: 297mm;
             }
             
             body {
-                width: 595px !important;
-                max-width: 595px !important;
+                background: white;
             }
             
             .page-container {
-                width: 595px !important;
-                max-width: 595px !important;
-                padding: 12px;
-                min-height: 842px;
+                width: 100%;
+                max-width: 100%;
+                padding: 15mm;
+                margin: 0;
+                background: white;
+            }
+            
+            /* Remove page margins as we handle them in container */
+            @page {
+                margin: 0;
             }
         }
         
-        /* Brand Header - Enhanced with logo support */
+        /* Brand Header - Compact and clear */
         .brand-header {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 20px;
-            padding: 14px;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         
         .brand-logo-container {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
             background: #f5f5f5;
             display: flex;
             align-items: center;
@@ -139,7 +126,7 @@ object CatalogHtmlTemplate {
         }
         
         .brand-logo-placeholder {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 700;
             color: #999;
         }
@@ -152,30 +139,30 @@ object CatalogHtmlTemplate {
         }
         
         .brand-name {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
             color: #1a1a1a;
-            margin-bottom: 4px;
-            letter-spacing: -0.5px;
+            margin-bottom: 2px;
+            letter-spacing: -0.3px;
             line-height: 1.2;
         }
         
         .brand-count {
-            font-size: 13px;
+            font-size: 12px;
             color: #666;
             font-weight: 500;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .brand-header {
-                padding: 12px;
-                gap: 8px;
-                margin-bottom: 16px;
+                margin-bottom: 12mm;
+                padding: 3mm 4mm;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
             }
             
             .brand-logo-container {
-                width: 36px;
-                height: 36px;
+                width: 30px;
+                height: 30px;
             }
             
             .brand-name {
@@ -183,137 +170,84 @@ object CatalogHtmlTemplate {
             }
             
             .brand-count {
-                font-size: 12px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .brand-header {
-                padding: 10px;
-                flex-direction: row;
-            }
-            
-            .brand-logo-container {
-                width: 32px;
-                height: 32px;
-            }
-            
-            .brand-name {
-                font-size: 16px;
-            }
-            
-            .brand-count {
                 font-size: 11px;
             }
         }
         
-        @media print {
-            .brand-header {
-                margin-bottom: 12px;
-                padding: 10px;
-                background: white;
-            }
-            
-            .brand-logo-container {
-                width: 32px;
-                height: 32px;
-            }
-            
-            .brand-name {
-                font-size: 16px;
-            }
-            
-            .brand-count {
-                font-size: 10px;
-            }
-        }
-        
-        /* Vehicle Cards List */
+        /* Vehicle Cards List - Optimized spacing */
         .vehicles-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
             width: 100%;
-            box-sizing: border-box;
         }
         
         @media print {
             .vehicles-list {
-                gap: 10px;
+                gap: 3mm; /* 3mm gap between cards */
             }
         }
         
-        /* Vehicle Card - Enhanced design */
+        /* Vehicle Card - Optimized for A4 */
         .vehicle-card {
             background: white;
-            border-radius: 16px;
-            padding: 16px;
+            border-radius: 10px;
+            padding: 12px;
             display: flex;
             flex-direction: row;
-            gap: 16px;
-            align-items: center;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            gap: 12px;
+            align-items: flex-start;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
             page-break-inside: avoid;
             break-inside: avoid;
             width: 100%;
-            box-sizing: border-box;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            border: 1px solid #f0f0f0;
-        }
-        
-        @media screen and (max-width: 768px) {
-            .vehicle-card {
-                padding: 14px;
-                gap: 14px;
-                border-radius: 14px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .vehicle-card {
-                padding: 12px;
-                gap: 12px;
-                border-radius: 12px;
-            }
+            border: 1px solid #e8e8e8;
         }
         
         @media screen {
+            .vehicle-card {
+                padding: 14px;
+                gap: 14px;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            
             .vehicle-card:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
             }
         }
         
+        @media print {
+            .vehicle-card {
+                padding: 3mm;
+                gap: 3mm;
+                border-radius: 2mm;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                border: 0.5pt solid #e0e0e0;
+            }
+        }
+        
+        /* Vehicle Image Container - Compact size */
         .vehicle-image-container {
-            width: 110px;
-            min-width: 110px;
-            height: 110px;
-            border-radius: 12px;
+            width: 85px;
+            min-width: 85px;
+            height: 85px;
+            border-radius: 8px;
             background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-sizing: border-box;
             flex-shrink: 0;
             position: relative;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .vehicle-image-container {
-                width: 100px;
-                min-width: 100px;
-                height: 100px;
-                border-radius: 10px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .vehicle-image-container {
-                width: 90px;
-                min-width: 90px;
-                height: 90px;
-                border-radius: 10px;
+                width: 22mm;
+                min-width: 22mm;
+                height: 22mm;
+                border-radius: 2mm;
             }
         }
         
@@ -321,12 +255,8 @@ object CatalogHtmlTemplate {
             content: '';
             position: absolute;
             inset: 0;
-            border-radius: 12px;
-            padding: 1px;
-            background: linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.02) 100%);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
         }
         
         .vehicle-image {
@@ -337,147 +267,125 @@ object CatalogHtmlTemplate {
         }
         
         .no-image-icon {
-            font-size: 50px;
+            font-size: 40px;
             color: #ccc;
-            opacity: 0.6;
+            opacity: 0.5;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .no-image-icon {
-                font-size: 45px;
+                font-size: 32px;
             }
         }
         
-        @media screen and (max-width: 480px) {
-            .no-image-icon {
-                font-size: 40px;
-            }
-        }
-        
+        /* Vehicle Details - Optimized layout */
         .vehicle-details {
             flex: 1;
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
         
+        @media print {
+            .vehicle-details {
+                gap: 1.5mm;
+            }
+        }
+        
+        /* Vehicle Name - Clear and readable */
         .vehicle-name {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             color: #1a1a1a;
             line-height: 1.3;
             word-wrap: break-word;
             word-break: break-word;
             overflow-wrap: break-word;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .vehicle-name {
-                font-size: 17px;
-                line-height: 1.3;
+                font-size: 13pt; /* 13pt = ~17.3px, clear for PDF */
+                line-height: 1.25;
+                margin-bottom: 1mm;
             }
         }
         
-        @media screen and (max-width: 480px) {
-            .vehicle-name {
-                font-size: 16px;
-                line-height: 1.3;
-                margin-bottom: 4px;
-            }
-        }
-        
+        /* Chips - Compact badges */
         .vehicle-chips {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
+            align-items: center;
         }
         
-        @media screen and (max-width: 480px) {
+        @media print {
             .vehicle-chips {
-                gap: 6px;
+                gap: 1.5mm;
             }
         }
         
         .chip {
             display: inline-flex;
             align-items: center;
-            gap: 5px;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 13px;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
             font-weight: 600;
-            line-height: 1.3;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            line-height: 1.2;
             white-space: nowrap;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .chip {
-                padding: 5px 10px;
-                font-size: 12px;
-                gap: 4px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .chip {
-                padding: 4px 9px;
-                font-size: 12px;
-                gap: 4px;
+                padding: 1mm 2mm;
+                font-size: 9pt; /* Clear text size for PDF */
+                border-radius: 3mm;
+                gap: 1mm;
             }
         }
         
         .chip-color {
-            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            background: #e3f2fd;
             color: #1565c0;
-            border: 1px solid rgba(25, 118, 210, 0.2);
+            border: 1px solid rgba(25, 118, 210, 0.3);
         }
         
         .chip-year {
-            background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+            background: #f3e5f5;
             color: #6a1b9a;
-            border: 1px solid rgba(123, 31, 162, 0.2);
+            border: 1px solid rgba(123, 31, 162, 0.3);
         }
         
         .chip-icon {
-            font-size: 14px;
+            font-size: 12px;
             line-height: 1;
-            filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.1));
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .chip-icon {
-                font-size: 13px;
+                font-size: 10pt;
             }
         }
         
-        @media screen and (max-width: 480px) {
-            .chip-icon {
-                font-size: 13px;
-            }
-        }
-        
+        /* Condition Text - Clear readability */
         .vehicle-condition {
-            font-size: 14px;
+            font-size: 13px;
             color: #555;
             font-weight: 500;
-            line-height: 1.5;
-            margin-top: 4px;
+            line-height: 1.4;
+            margin-top: 2px;
             word-break: break-word;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .vehicle-condition {
-                font-size: 13px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .vehicle-condition {
-                font-size: 13px;
-                margin-top: 4px;
+                font-size: 10pt; /* 10pt = ~13.3px, very readable */
+                line-height: 1.4;
+                margin-top: 1mm;
             }
         }
         
@@ -486,39 +394,32 @@ object CatalogHtmlTemplate {
             font-weight: 600;
         }
         
+        /* Extra Info - Compact metadata */
         .vehicle-extra-info {
-            margin-top: 10px;
-            padding-top: 10px;
+            margin-top: 6px;
+            padding-top: 6px;
             border-top: 1px solid #f0f0f0;
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
-            font-size: 12px;
+            gap: 10px;
+            font-size: 11px;
             color: #777;
         }
         
-        @media screen and (max-width: 768px) {
+        @media print {
             .vehicle-extra-info {
-                margin-top: 8px;
-                padding-top: 8px;
-                gap: 12px;
-                font-size: 11px;
-            }
-        }
-        
-        @media screen and (max-width: 480px) {
-            .vehicle-extra-info {
-                margin-top: 8px;
-                padding-top: 8px;
-                gap: 10px;
-                font-size: 11px;
+                margin-top: 1.5mm;
+                padding-top: 1.5mm;
+                gap: 2.5mm;
+                font-size: 9pt;
+                border-top: 0.5pt solid #e8e8e8;
             }
         }
         
         .info-item {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 3px;
         }
         
         .info-label {
@@ -531,51 +432,69 @@ object CatalogHtmlTemplate {
             color: #333;
         }
         
-        @media print {
+        /* Responsive adjustments for screen */
+        @media screen and (max-width: 768px) {
+            .page-container {
+                padding: 16px;
+            }
+            
+            .brand-header {
+                padding: 12px;
+                gap: 10px;
+            }
+            
             .vehicle-card {
                 padding: 12px;
                 gap: 12px;
-                border-radius: 10px;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             }
             
             .vehicle-image-container {
                 width: 80px;
                 min-width: 80px;
                 height: 80px;
-                border-radius: 8px;
+            }
+            
+            .vehicle-name {
+                font-size: 15px;
+            }
+            
+            .chip {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+        }
+        
+        @media screen and (max-width: 480px) {
+            .page-container {
+                padding: 12px;
+            }
+            
+            .vehicle-image-container {
+                width: 70px;
+                min-width: 70px;
+                height: 70px;
             }
             
             .vehicle-name {
                 font-size: 14px;
             }
-            
-            .chip {
-                padding: 4px 8px;
-                font-size: 10px;
-                gap: 3px;
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-            }
-            
-            .chip-icon {
-                font-size: 11px;
-            }
-            
-            .vehicle-condition {
-                font-size: 11px;
-            }
-            
-            .vehicle-extra-info {
-                margin-top: 8px;
-                padding-top: 8px;
-                gap: 10px;
-                font-size: 10px;
-            }
         }
         
-        /* PDF Pagination - Max 3 cards per page */
+        /* Page Break Control for Multi-page PDFs */
+        .brand-section {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        
+        .brand-section:not(:first-child) {
+            page-break-before: always;
+            break-before: page;
+        }
+        
+        /* Ensure proper pagination */
         .page-wrapper {
-            min-height: auto;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
         
         .page-wrapper:not(:last-child) {
@@ -583,34 +502,12 @@ object CatalogHtmlTemplate {
             break-after: page;
         }
         
-        /* Print Optimizations */
+        /* Print color accuracy */
         @media print {
-            /* Force new page for each brand */
-            .brand-section {
-                page-break-before: always;
-                break-before: page;
-            }
-            
-            .brand-section:first-child {
-                page-break-before: auto;
-                break-before: auto;
-            }
-            
-            /* Prevent cards from being cut */
-            .vehicle-card {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-            
-            /* Page wrapper for grouping 3 cards */
-            .page-wrapper {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-            
-            .page-wrapper:not(:last-child) {
-                page-break-after: always !important;
-                break-after: page !important;
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
             }
         }
     </style>

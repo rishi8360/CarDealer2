@@ -127,7 +127,7 @@ fun CustomerFormScreen(
                 OutlinedTextField(
                     value = phoneNumber,
                     onValueChange = { phoneNumber = it },
-                    label = { TranslatedText("Phone Number *") },
+                    label = { TranslatedText("Phone Number") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Phone),
                     isError = uiState.phoneError != null
@@ -142,12 +142,8 @@ fun CustomerFormScreen(
                     label = { TranslatedText("Address *") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
-                    maxLines = 5,
-                    isError = uiState.addressError != null
+                    maxLines = 5
                 )
-                if (uiState.addressError != null) {
-                    Text(text = uiState.addressError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
 
                 ImagePickerField(
                     label = TranslationManager.translate("Person Photo", isPunjabiEnabled),
@@ -210,27 +206,19 @@ fun CustomerFormScreen(
                     itemToString = { it },
                     onExpandedChange = { }
                 )
-                if (uiState.idProofTypeError != null) {
-                    Text(text = uiState.idProofTypeError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
 
                 OutlinedTextField(
                     value = idProofNumber,
                     onValueChange = { idProofNumber = it },
                     label = { TranslatedText("ID Proof Number *") },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { TranslatedText("Enter ID number") },
-                    isError = uiState.idProofNumberError != null
+                    placeholder = { TranslatedText("Enter ID number") }
                 )
-                if (uiState.idProofNumberError != null) {
-                    Text(text = uiState.idProofNumberError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
 
                 PdfPickerField(
                     label = TranslationManager.translate("ID Proof PDFs", isPunjabiEnabled),
                     pdfUrls = idProofPdfs,
-                    onPdfChange = { idProofPdfs = it },
-                    errorMessage = uiState.idProofImageError
+                    onPdfChange = { idProofPdfs = it }
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))

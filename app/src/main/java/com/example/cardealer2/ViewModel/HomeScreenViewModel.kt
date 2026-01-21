@@ -1,9 +1,11 @@
 package com.example.cardealer2.ViewModel
 
+import androidx.compose.material3.DrawerValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Brand
 import com.example.cardealer2.repository.VehicleRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -26,6 +28,13 @@ class HomeScreenViewModel : ViewModel(){
     // 🔹 Expose repository's loading and error states
     val isLoading: StateFlow<Boolean> = repository.isLoading
     val error: StateFlow<String?> = repository.error
+
+    // 🔹 Drawer state management
+    private val _drawerState = MutableStateFlow(DrawerValue.Closed)
+    val drawerState: StateFlow<DrawerValue> = _drawerState
+    
+    private val _canOpenDrawer = MutableStateFlow(true)
+    val canOpenDrawer: StateFlow<Boolean> = _canOpenDrawer
 
     init {
         // 🔹 Update filtered brands whenever brands change
@@ -55,6 +64,34 @@ class HomeScreenViewModel : ViewModel(){
             currentBrands.filter { brand ->
                 brand.brandId.contains(query, ignoreCase = true)
             }
+        }
+    }
+
+    /**
+     * Open drawer
+     */
+    fun openDrawer() {
+        if (_canOpenDrawer.value) {
+            _drawerState.value = DrawerValue.Open
+        }
+    }
+
+    /**
+     * Close drawer
+     */
+    fun closeDrawer() {
+        _drawerState.value = DrawerValue.Closed
+    }
+
+    /**
+     * Reset drawer state when returning to home screen
+     */
+    fun resetDrawerState() {
+        _canOpenDrawer.value = false
+        _drawerState.value = DrawerValue.Closed
+        viewModelScope.launch {
+            delay(150)
+            _canOpenDrawer.value = true
         }
     }
 

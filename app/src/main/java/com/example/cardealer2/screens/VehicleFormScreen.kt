@@ -139,7 +139,7 @@ fun VehicleFormScreen(
             price = p.price.toString()
             sellingPrice = p.sellingPrice.toString()
             year = p.year.toString()
-            type = p.type
+            type = p.type.lowercase() // Normalize to lowercase
             nocPdfs = p.noc
             rcPdfs = p.rc
             insurancePdfs = p.insurance
@@ -158,7 +158,7 @@ fun VehicleFormScreen(
             initialPrice = p.price.toString()
             initialSellingPrice = p.sellingPrice.toString()
             initialYear = p.year.toString()
-            initialType = p.type
+            initialType = p.type.lowercase() // Normalize to lowercase
             initialNocPdfs = p.noc
             initialRcPdfs = p.rc
             initialInsurancePdfs = p.insurance
@@ -292,16 +292,27 @@ fun VehicleFormScreen(
                 FilterableDropdownField(
                     label = TranslationManager.translate("Type of Vehicle", isPunjabiEnabled),
                     items = vehicleTypeItems,
-                    selectedItem = type,
+                    selectedItem = when (type.lowercase()) {
+                        "car" -> TranslationManager.translate("Car", isPunjabiEnabled)
+                        "bike" -> TranslationManager.translate("Bike", isPunjabiEnabled)
+                        else -> type
+                    },
                     onItemSelected = { 
-                        // Convert translated text back to English for internal use
+                        // Convert translated text back to English and normalize to lowercase
                         type = when (it) {
-                            TranslationManager.translate("Bike", isPunjabiEnabled) -> "Bike"
-                            TranslationManager.translate("Car", isPunjabiEnabled) -> "Car"
-                            else -> it
+                            TranslationManager.translate("Bike", isPunjabiEnabled) -> "bike"
+                            TranslationManager.translate("Car", isPunjabiEnabled) -> "car"
+                            else -> it.lowercase()
                         }
                     },
-                    itemToString = { it },
+                    itemToString = { 
+                        // Display translated version for UI
+                        when (type.lowercase()) {
+                            "car" -> TranslationManager.translate("Car", isPunjabiEnabled)
+                            "bike" -> TranslationManager.translate("Bike", isPunjabiEnabled)
+                            else -> type
+                        }
+                    },
                     onExpandedChange = { expanded -> isDropdownExpanded = expanded }
                 )
 

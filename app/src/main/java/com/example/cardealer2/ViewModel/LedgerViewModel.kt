@@ -361,6 +361,35 @@ class LedgerViewModel : ViewModel() {
     }
     
     /**
+     * Set capital balance directly (edits balance to a specific value)
+     */
+    fun setCapitalBalance(
+        type: String,
+        newBalance: Double,
+        description: String = "Manual Balance Edit",
+        reason: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val result = PurchaseRepository.setCapitalBalance(type, newBalance, description, reason)
+                result.fold(
+                    onSuccess = {
+                        loadCapitalBalances() // Reload balances
+                        onSuccess()
+                    },
+                    onFailure = { exception ->
+                        onError(exception.message ?: "Failed to set balance")
+                    }
+                )
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to set balance")
+            }
+        }
+    }
+    
+    /**
      * Set initial capital balance
      */
     fun setInitialCapitalBalance(
@@ -578,6 +607,12 @@ class LedgerViewModel : ViewModel() {
                                 val emi = (saleDoc.get("emi") as? Boolean) ?: false
                                 val status = (saleDoc.get("status") as? Boolean) ?: false
                                 
+                                // Read document handover flags
+                                val nocHandedOver = (saleDoc.get("nocHandedOver") as? Boolean) ?: false
+                                val rcHandedOver = (saleDoc.get("rcHandedOver") as? Boolean) ?: false
+                                val insuranceHandedOver = (saleDoc.get("insuranceHandedOver") as? Boolean) ?: false
+                                val otherDocsHandedOver = (saleDoc.get("otherDocsHandedOver") as? Boolean) ?: false
+                                
                                 // Convert timestamp properly
                                 val purchaseDateLong = try {
                                     val timestamp = saleDoc.get("purchaseDate")
@@ -599,7 +634,11 @@ class LedgerViewModel : ViewModel() {
                                     totalAmount = (saleDoc.get("totalAmount") as? Number)?.toDouble() ?: 0.0,
                                     emi = emi,
                                     status = status,
-                                    emiDetailsRef = saleDoc.get("emiDetailsRef") as? DocumentReference
+                                    emiDetailsRef = saleDoc.get("emiDetailsRef") as? DocumentReference,
+                                    nocHandedOver = nocHandedOver,
+                                    rcHandedOver = rcHandedOver,
+                                    insuranceHandedOver = insuranceHandedOver,
+                                    otherDocsHandedOver = otherDocsHandedOver
                                 )
                                 saleDetails = sale
                                 

@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Broker
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.Product
+import com.example.cardealer2.data.PersonTransaction
+import com.example.cardealer2.data.TransactionResult
 import com.example.cardealer2.repository.BrokerRepository
 import com.example.cardealer2.repository.CustomerRepository
 import com.example.cardealer2.repository.PurchaseRepository
@@ -31,7 +33,8 @@ data class PurchaseVehicleUiState(
     val addBrokerError: String? = null,
     val isPurchasingVehicle: Boolean = false,
     val purchaseVehicleSuccess: Boolean = false,
-    val purchaseVehicleError: String? = null
+    val purchaseVehicleError: String? = null,
+    val createdTransaction: PersonTransaction? = null
 )
 
 class PurchaseVehicleViewModel(
@@ -171,6 +174,23 @@ class PurchaseVehicleViewModel(
         brokerBill: List<String>,
         amount: Int = 0
     ) {
+        // Validation - only name and phone number
+        if (name.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                isAddingBroker = false,
+                addBrokerError = "Broker name is required"
+            )
+            return
+        }
+        
+        if (phoneNumber.isNotBlank() && !phoneNumber.trim().matches(Regex("^[0-9]{10}$"))) {
+            _uiState.value = _uiState.value.copy(
+                isAddingBroker = false,
+                addBrokerError = "Phone number must be 10 digits"
+            )
+            return
+        }
+        
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isAddingBroker = true,
@@ -433,7 +453,7 @@ class PurchaseVehicleViewModel(
                     price = price.toIntOrNull() ?: 0,
                     sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
-                    type = type,
+                    type = type.lowercase(), // Normalize to lowercase before saving
                     noc = nocUrls, // Already uploaded
                     rc = rcUrls, // Already uploaded
                     insurance = insuranceUrls, // Already uploaded
@@ -467,21 +487,28 @@ class PurchaseVehicleViewModel(
                     date = date
                 )
                 
-                if (purchaseResult.isSuccess) {
-                    // ✅ No need to reload - Firebase listener will automatically update StateFlow
-                    _uiState.value = _uiState.value.copy(
-                        isPurchasingVehicle = false,
-                        purchaseVehicleSuccess = true,
-                        purchaseVehicleError = null
-                    )
-                    kotlinx.coroutines.delay(1000)
-                    _uiState.value = _uiState.value.copy(purchaseVehicleSuccess = false)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isPurchasingVehicle = false,
-                        purchaseVehicleError = purchaseResult.exceptionOrNull()?.message ?: "Failed to create purchase and vehicle"
-                    )
-                }
+                purchaseResult.fold(
+                    onSuccess = { transactionResult ->
+                        // ✅ No need to reload - Firebase listener will automatically update StateFlow
+                        _uiState.value = _uiState.value.copy(
+                            isPurchasingVehicle = false,
+                            purchaseVehicleSuccess = true,
+                            purchaseVehicleError = null,
+                            createdTransaction = transactionResult.transaction
+                        )
+                        kotlinx.coroutines.delay(1000)
+                        _uiState.value = _uiState.value.copy(
+                            purchaseVehicleSuccess = false,
+                            createdTransaction = transactionResult.transaction // Keep transaction even after success flag resets
+                        )
+                    },
+                    onFailure = { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isPurchasingVehicle = false,
+                            purchaseVehicleError = exception.message ?: "Failed to create purchase and vehicle"
+                        )
+                    }
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isPurchasingVehicle = false,

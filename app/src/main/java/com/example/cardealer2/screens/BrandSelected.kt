@@ -88,8 +88,8 @@ fun BrandSelected(
     val subtitle = remember(brand, isPunjabiEnabled) {
         if (brand != null) {
             val totalVehicles = brand!!.vehicle.size
-            val carCount = brand!!.vehicle.count { it.type.equals("car", true) }
-            val bikeCount = brand!!.vehicle.count { it.type.equals("bike", true) }
+            val carCount = brand!!.vehicle.count { it.type.lowercase() == "car" }
+            val bikeCount = brand!!.vehicle.count { it.type.lowercase() == "bike" }
             val vehiclesText = TranslationManager.translate("vehicles", isPunjabiEnabled)
             val carsText = TranslationManager.translate("cars", isPunjabiEnabled)
             val bikesText = TranslationManager.translate("bikes", isPunjabiEnabled)
@@ -133,7 +133,7 @@ fun BrandSelected(
                 }
             )
         },
-        floatingActionButton = {
+        /*floatingActionButton = {
             FloatingActionButton(
                 onClick = { navController.navigate("add_vehicle/$brandId") },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -148,7 +148,7 @@ fun BrandSelected(
                     tint = Color.White
                 )
             }
-        }
+        }*/
     ) { paddingValues ->
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -288,9 +288,9 @@ fun BrandSelected(
                     brand != null -> {
                         val filteredVehicles = brand!!.vehicle.filter { vehicle ->
                             val matchesTab = if (selectedTab == 0)
-                                vehicle.type.equals("car", true)
+                                vehicle.type.lowercase() == "car"
                             else
-                                vehicle.type.equals("bike", true)
+                                vehicle.type.lowercase() == "bike"
                             val matchesSearch = searchText.isBlank() ||
                                     vehicle.productId.contains(searchText, ignoreCase = true)
                             matchesTab && matchesSearch
@@ -404,7 +404,7 @@ fun EnhancedVehicleCard(
                     )
                 } else {
                     // Placeholder based on vehicle type
-                    val icon = if (vehicle.type.equals("car", true))
+                    val icon = if (vehicle.type.lowercase() == "car")
                         Icons.Default.DirectionsCar
                     else
                         Icons.Default.TwoWheeler

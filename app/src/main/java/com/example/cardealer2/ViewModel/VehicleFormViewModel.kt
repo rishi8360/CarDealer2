@@ -267,7 +267,7 @@ class VehicleFormViewModel(
                     price = price.toIntOrNull() ?: 0,
                     sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
-                    type = type,
+                    type = type.lowercase(), // Normalize to lowercase before saving
                     noc = emptyList(), // Will be uploaded
                     rc = emptyList(), // Will be uploaded
                     insurance = emptyList(), // Will be uploaded
@@ -340,7 +340,7 @@ class VehicleFormViewModel(
                     price = price.toIntOrNull() ?: 0,
                     sellingPrice = sellingPrice.toIntOrNull() ?: 0,
                     year = year.toIntOrNull() ?: 0,
-                    type = type,
+                    type = type.lowercase(), // Normalize to lowercase before saving
                     noc = nocPdfs,
                     rc = rcPdfs,
                     insurance = insurancePdfs,

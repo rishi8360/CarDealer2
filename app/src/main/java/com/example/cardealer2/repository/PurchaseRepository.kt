@@ -9,6 +9,7 @@ import com.example.cardealer2.data.TransactionType
 import com.example.cardealer2.data.PersonType
 import com.example.cardealer2.data.PaymentMethod
 import com.example.cardealer2.data.Product
+import com.example.cardealer2.data.TransactionResult
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -417,6 +418,25 @@ object PurchaseRepository {
     }
     
     /**
+     * Get purchase by DocumentReference
+     */
+    suspend fun getPurchaseByReference(purchaseRef: com.google.firebase.firestore.DocumentReference): Result<Purchase> {
+        return try {
+            val document = purchaseRef.get().await()
+            if (document.exists()) {
+                val purchase = document.toObject(Purchase::class.java)
+                    ?: return Result.failure(Exception("Failed to parse purchase data"))
+                Result.success(purchase.copy(purchaseId = document.id))
+            } else {
+                Result.failure(Exception("Purchase not found"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error getting purchase by reference: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Get all purchases - now returns StateFlow value
      * Use purchases StateFlow directly in ViewModels instead
      * @deprecated Use purchases StateFlow directly instead
@@ -571,6 +591,68 @@ object PurchaseRepository {
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error adjusting capital balance: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Set capital balance directly (edits the balance to a specific value)
+     * Records the difference as a transaction for audit purposes
+     */
+    suspend fun setCapitalBalance(
+        type: String,
+        newBalance: Double,
+        description: String = "Manual Balance Edit",
+        reason: String? = null
+    ): Result<Unit> {
+        return try {
+            if (type !in listOf("Cash", "Bank", "Credit")) {
+                return Result.failure(Exception("Invalid capital type. Must be Cash, Bank, or Credit"))
+            }
+            
+            val capitalDocRef = capitalCollection.document(type)
+            
+            db.runTransaction { transaction ->
+                val snapshot = transaction.get(capitalDocRef)
+                val existingTransactions = snapshot.get("transactions") as? List<Map<String, Any>> ?: emptyList()
+                val currentBalance = (snapshot.get("balance") as? Long)?.toDouble() 
+                    ?: (snapshot.get("balance") as? Double) ?: 0.0
+                
+                // Calculate the difference for audit trail
+                val difference = newBalance - currentBalance
+                
+                val transactionData = hashMapOf<String, Any>(
+                    "transactionDate" to System.currentTimeMillis(),
+                    "createdAt" to System.currentTimeMillis(),
+                    "orderNumber" to 0,
+                    "amount" to kotlin.math.abs(difference),
+                    "type" to "MANUAL_EDIT",
+                    "description" to description,
+                    "previousBalance" to currentBalance,
+                    "newBalance" to newBalance
+                )
+                
+                reason?.let {
+                    transactionData["reason"] = it
+                }
+                
+                val updatedTransactions = existingTransactions.toMutableList()
+                updatedTransactions.add(transactionData)
+                
+                transaction.set(
+                    capitalDocRef,
+                    mapOf(
+                        "transactions" to updatedTransactions,
+                        "balance" to newBalance
+                    ),
+                    SetOptions.merge()
+                )
+            }.await()
+            
+            Log.d(TAG, "✅ Set $type balance to $newBalance")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error setting capital balance: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -811,7 +893,7 @@ object PurchaseRepository {
         brokerFeePaymentMethods: Map<String, String>? = null,
         note: String = "",
         date: String = ""
-    ): Result<String> {
+    ): Result<TransactionResult> {
         val purchaseDate = date.ifBlank {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             sdf.format(Date())
@@ -868,8 +950,12 @@ object PurchaseRepository {
                 }
             }
             
+            // Calculate payment details outside transaction block for fallback use
+            val (cashAmount, bankAmount, creditAmount) = extractPaymentAmounts(paymentMethods)
+            val paymentMethod = determinePaymentMethod(paymentMethods)
+            
             // Run everything in a single transaction
-            val purchaseId = db.runTransaction { transaction ->
+            val (purchaseId, personTransaction, orderNumber) = db.runTransaction { transaction ->
                 // ========== PHASE 1: READ ALL DOCUMENTS FIRST ==========
                 // Firestore requires all reads to complete before any writes
                 // IMPORTANT: Any DocumentReference that will be written must have its document read first
@@ -1084,8 +1170,7 @@ object PurchaseRepository {
                 // 7. Create person transaction records (within the same transaction)
                 val transactionCollection = db.collection("Transactions")
                 val nowTimestamp = com.google.firebase.Timestamp.now()
-                val (cashAmount, bankAmount, creditAmount) = extractPaymentAmounts(paymentMethods)
-                val paymentMethod = determinePaymentMethod(paymentMethods)
+                // Note: cashAmount, bankAmount, creditAmount, paymentMethod are already calculated outside
                 
                 // Determine purchase type from brokerOrMiddleManRef if not provided
                 val determinedPurchaseType = purchaseType ?: brokerOrMiddleManRef?.let { ref ->
@@ -1095,6 +1180,9 @@ object PurchaseRepository {
                         else -> null
                     }
                 }
+                
+                // Track the primary transaction (Owner > Middle Man > Broker Fee)
+                var createdPersonTransaction: PersonTransaction? = null
                 
                 // Create BROKER_FEE transaction (if broker involved and broker fee exists)
                 if (determinedPurchaseType == "Broker" && brokerFee > 0 && brokerOrMiddleManRef != null) {
@@ -1126,6 +1214,30 @@ object PurchaseRepository {
                         "note" to note
                     )
                     transaction.set(brokerFeeTransactionRef, brokerFeeTransactionData)
+                    
+                    // Store as primary if no owner/middle man (lowest priority)
+                    if (createdPersonTransaction == null) {
+                        createdPersonTransaction = PersonTransaction(
+                            transactionId = brokerFeeTransactionRef.id,
+                            type = TransactionType.BROKER_FEE,
+                            personType = PersonType.BROKER,
+                            personRef = brokerOrMiddleManRef,
+                            personName = middleMan,
+                            relatedRef = purchaseDocRef,
+                            amount = brokerFee,
+                            paymentMethod = brokerFeePaymentMethod,
+                            cashAmount = brokerFeeCash,
+                            bankAmount = brokerFeeBank,
+                            creditAmount = brokerFeeCredit,
+                            date = purchaseDate,
+                            orderNumber = orderNumber,
+                            transactionNumber = currentTransactionNo,
+                            description = "Broker fee - Order #$orderNumber",
+                            status = "COMPLETED",
+                            createdAt = nowTimestamp.toDate().time,
+                            note = note
+                        )
+                    }
                 }
                 
                 // Create PURCHASE transaction for Middle Man (if middle man involved)
@@ -1154,6 +1266,30 @@ object PurchaseRepository {
                         "note" to note
                     )
                     transaction.set(middleManTransactionRef, middleManTransactionData)
+                    
+                    // Store as primary if no owner (medium priority)
+                    if (createdPersonTransaction == null) {
+                        createdPersonTransaction = PersonTransaction(
+                            transactionId = middleManTransactionRef.id,
+                            type = TransactionType.PURCHASE,
+                            personType = PersonType.MIDDLE_MAN,
+                            personRef = brokerOrMiddleManRef,
+                            personName = middleMan,
+                            relatedRef = purchaseDocRef,
+                            amount = grandTotal,
+                            paymentMethod = paymentMethod,
+                            cashAmount = cashAmount,
+                            bankAmount = bankAmount,
+                            creditAmount = creditAmount,
+                            date = purchaseDate,
+                            orderNumber = orderNumber,
+                            transactionNumber = currentTransactionNo,
+                            description = "Vehicle purchase - Order #$orderNumber",
+                            status = "COMPLETED",
+                            createdAt = nowTimestamp.toDate().time,
+                            note = note
+                        )
+                    }
                 }
                 
                 // Create PURCHASE transaction for Owner (if owner specified)
@@ -1182,6 +1318,28 @@ object PurchaseRepository {
                         "note" to note
                     )
                     transaction.set(ownerTransactionRef, ownerTransactionData)
+                    
+                    // Owner transaction has highest priority - always use this
+                    createdPersonTransaction = PersonTransaction(
+                        transactionId = ownerTransactionRef.id,
+                        type = TransactionType.PURCHASE,
+                        personType = PersonType.CUSTOMER,
+                        personRef = ref,
+                        personName = product.owner,
+                        relatedRef = purchaseDocRef,
+                        amount = grandTotal,
+                        paymentMethod = paymentMethod,
+                        cashAmount = cashAmount,
+                        bankAmount = bankAmount,
+                        creditAmount = creditAmount,
+                        date = purchaseDate,
+                        orderNumber = orderNumber,
+                        transactionNumber = currentTransactionNo,
+                        description = "Vehicle purchase - Order #$orderNumber",
+                        status = "COMPLETED",
+                        createdAt = nowTimestamp.toDate().time,
+                        note = note
+                    )
                 }
                 
                 // Add transactionNumber to purchase data (use owner transaction if exists, otherwise middle man, otherwise broker fee)
@@ -1198,12 +1356,35 @@ object PurchaseRepository {
                 // Update maxTransactionNo with the final value
                 transaction.update(maxTransactionNoDocRefLocal, "maxTransactionNo", currentTransactionNo)
                 
-                // Return purchase ID
-                purchaseIdValue
+                // Return purchase ID, transaction, and orderNumber (or null if no transaction was created)
+                Triple(purchaseIdValue, createdPersonTransaction, orderNumber)
             }.await()
             
             Log.d(TAG, "✅ Purchase, capital transactions, vehicle, and person transactions created atomically with purchaseId: $purchaseId")
-            Result.success(purchaseId)
+            
+            // If no transaction was created (shouldn't happen, but handle gracefully)
+            val transaction = personTransaction ?: PersonTransaction(
+                transactionId = "",
+                type = TransactionType.PURCHASE,
+                personType = PersonType.CUSTOMER,
+                personRef = ownerRef ?: brokerOrMiddleManRef,
+                personName = product.owner.ifBlank { middleMan },
+                relatedRef = null,
+                amount = grandTotal,
+                paymentMethod = paymentMethod,
+                cashAmount = cashAmount,
+                bankAmount = bankAmount,
+                creditAmount = creditAmount,
+                date = purchaseDate,
+                orderNumber = orderNumber,
+                transactionNumber = null,
+                description = "Vehicle purchase - Order #$orderNumber",
+                status = "COMPLETED",
+                createdAt = System.currentTimeMillis(),
+                note = note
+            )
+            
+            Result.success(TransactionResult(purchaseId, transaction))
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error in atomic purchase with vehicle: ${e.message}", e)
             Result.failure(e)

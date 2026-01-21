@@ -21,6 +21,7 @@ import com.example.cardealer2.utils.TranslationManager
 import com.example.cardealer2.utils.TranslatedText
 import com.example.cardealer2.utils.TransactionBillGenerator
 import com.example.cardealer2.utils.PrintManagerUtil
+import com.example.cardealer2.utils.pdf.CanvasPdfGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -171,20 +172,46 @@ fun PrintBillDialog(
                             if (buyerName.isNotBlank()) {
                                 isGeneratingHtml = true
                                 scope.launch {
-                                    val html = withContext(Dispatchers.Default) {
-                                        TransactionBillGenerator.generateBillHTML(
-                                            transaction = transaction,
-                                            relatedData = relatedData,
-                                            invoiceNumber = invoiceNumber,
-                                            invoiceDate = invoiceDate,
-                                            buyerName = buyerName,
-                                            buyerAddress = buyerAddress,
-                                            buyerGstin = buyerGstin
+                                    try {
+                                        // Generate PDF using Canvas (no HTML)
+                                        val pdfResult = withContext(Dispatchers.Default) {
+                                            CanvasPdfGenerator.generatePdfFromData(
+                                                context = context,
+                                                transaction = transaction,
+                                                relatedData = relatedData,
+                                                invoiceNumber = invoiceNumber,
+                                                invoiceDate = invoiceDate,
+                                                buyerName = buyerName,
+                                                buyerAddress = buyerAddress,
+                                                buyerGstin = buyerGstin,
+                                                fileName = invoiceNumber.replace("/", "_") // Sanitize filename
+                                            )
+                                        }
+                                        
+                                        isGeneratingHtml = false
+                                        
+                                        pdfResult.fold(
+                                            onSuccess = { pdfFile ->
+                                                // Share PDF immediately
+                                                CanvasPdfGenerator.sharePdf(
+                                                    context = context,
+                                                    pdfFile = pdfFile,
+                                                    subject = "Invoice $invoiceNumber"
+                                                )
+                                                // Close dialog after sharing
+                                                onDismiss()
+                                            },
+                                            onFailure = { error ->
+                                                // Log error
+                                                android.util.Log.e("PrintBillDialog", "PDF generation failed: ${error.message}", error)
+                                                isGeneratingHtml = false
+                                                // Error state - could show snackbar here
+                                            }
                                         )
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("PrintBillDialog", "Error generating PDF: ${e.message}", e)
+                                        isGeneratingHtml = false
                                     }
-                                    htmlContent = html
-                                    isGeneratingHtml = false
-                                    showWebView = true
                                 }
                             }
                         },
@@ -203,7 +230,7 @@ fun PrintBillDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                         }
                         TranslatedText(
-                            englishText = if (isGeneratingHtml) "Generating..." else "Generate Bill",
+                            englishText = if (isGeneratingHtml) "Generating PDF..." else "Generate & Share PDF",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

@@ -45,6 +45,11 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.example.cardealer2.repository.PasswordRepository
 import com.example.cardealer2.ViewModel.BrandVehicleViewModel
 import com.example.cardealer2.ViewModel.VehicleDetailViewModel
 import com.example.cardealer2.data.Product
@@ -110,12 +115,16 @@ fun VehicleDetailScreen(
                     }
                 },
                 actions = {
-                    productFeature?.chassisNumber?.let { chassisNumber ->
-                        EditActionButton(
-                            onClick = {
-                                navController.navigate("edit_vehicle/$chassisNumber")
-                            }
-                        )
+                    // Hide edit action for sold vehicles
+                    val product = productFeature
+                    if (product != null && !product.sold) {
+                        product.chassisNumber.let { chassisNumber ->
+                            EditActionButton(
+                                onClick = {
+                                    navController.navigate("edit_vehicle/$chassisNumber")
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -238,8 +247,22 @@ fun VehicleDetailScreen(
         isPunjabiEnabled : Boolean
     ) {
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
         var showOwnerDialog by remember { mutableStateOf(false) }
         var showBrokerDialog by remember { mutableStateOf(false) }
+        
+        // Password protection state
+        var showPasswordDialog by remember { mutableStateOf(false) }
+        var passwordInput by remember { mutableStateOf("") }
+        var isPriceVisible by remember { mutableStateOf(false) }
+        var passwordError by remember { mutableStateOf<String?>(null) }
+        val passwordRepository = remember { PasswordRepository }
+        val storedPassword by passwordRepository.password.collectAsState()
+        
+        // Load password when component loads
+        LaunchedEffect(Unit) {
+            passwordRepository.fetchPassword(context)
+        }
         
         val customer by viewModel.customer.collectAsState()
         val broker by viewModel.broker.collectAsState()
@@ -385,7 +408,14 @@ fun VehicleDetailScreen(
                     value = "₹${product.price}",
                     icon = Icons.Outlined.AttachMoney,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    isBlurred = !isPriceVisible && storedPassword.isNotEmpty(),
+                    onEyeClick = {
+                        if (storedPassword.isNotEmpty()) {
+                            showPasswordDialog = true
+                        }
+                    },
+                    showEyeIcon = storedPassword.isNotEmpty()
                 )
                 QuickInfoCard(
                     title = TranslationManager.translate("Year", isPunjabiEnabled),
@@ -408,7 +438,14 @@ fun VehicleDetailScreen(
                         value = "₹${product.sellingPrice}",
                         icon = Icons.Outlined.AttachMoney,
                         color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        isBlurred = !isPriceVisible && storedPassword.isNotEmpty(),
+                        onEyeClick = {
+                            if (storedPassword.isNotEmpty()) {
+                                showPasswordDialog = true
+                            }
+                        },
+                        showEyeIcon = storedPassword.isNotEmpty()
                     )
                 } else {
                     QuickInfoCard(
@@ -706,6 +743,78 @@ fun VehicleDetailScreen(
                 onDismiss = { showBrokerDialog = false }
             )
         }
+        
+        // Password Dialog
+        if (showPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showPasswordDialog = false
+                    passwordInput = ""
+                    passwordError = null
+                },
+                title = {
+                    TranslatedText(
+                        englishText = "Enter Password",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column {
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = {
+                                passwordInput = it
+                                passwordError = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { TranslatedText("Password") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            isError = passwordError != null,
+                            singleLine = true
+                        )
+                        if (passwordError != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = passwordError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val isValid = passwordRepository.verifyPassword(context, passwordInput)
+                                if (isValid) {
+                                    isPriceVisible = true
+                                    showPasswordDialog = false
+                                    passwordInput = ""
+                                    passwordError = null
+                                } else {
+                                    passwordError = "Incorrect password"
+                                }
+                            }
+                        }
+                    ) {
+                        TranslatedText("Confirm")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showPasswordDialog = false
+                            passwordInput = ""
+                            passwordError = null
+                        }
+                    ) {
+                        TranslatedText("Cancel")
+                    }
+                }
+            )
+        }
     }
 
     private fun openPdf(context: android.content.Context, pdfUrl: String) {
@@ -789,7 +898,10 @@ fun VehicleDetailScreen(
         value: String,
         icon: ImageVector,
         color: Color,
-        modifier: Modifier = Modifier
+        modifier: Modifier = Modifier,
+        isBlurred: Boolean = false,
+        onEyeClick: (() -> Unit)? = null,
+        showEyeIcon: Boolean = false
     ) {
         Card(
             modifier = modifier
@@ -827,13 +939,41 @@ fun VehicleDetailScreen(
                     textAlign = TextAlign.Center
                 )
 
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
-                    textAlign = TextAlign.Center
-                )
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isBlurred) "****" else value,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = color,
+                            textAlign = TextAlign.Center
+                        )
+                        
+                        if (showEyeIcon) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { onEyeClick?.invoke() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isBlurred) 
+                                        Icons.Outlined.VisibilityOff
+                                    else 
+                                        Icons.Outlined.Visibility,
+                                    contentDescription = if (isBlurred) "Show price" else "Hide price",
+                                    tint = color,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

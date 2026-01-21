@@ -217,7 +217,9 @@ fun BrandVehicles(
                         onResetClick = {
                             searchText = ""
                             soldStatusFilter = "not_sold_products" // Reset sold status filter
-                            filteredFeatures = productList.filterNotNull()
+                            filteredFeatures = productList
+                                .filterNotNull()
+                                .filter { !it.sold }
                         }
                     )
 

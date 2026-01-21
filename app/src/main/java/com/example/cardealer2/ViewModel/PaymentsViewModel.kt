@@ -9,6 +9,7 @@ import com.example.cardealer2.data.VehicleSale
 import com.example.cardealer2.repository.CustomerRepository
 import com.example.cardealer2.repository.SaleRepository
 import com.example.cardealer2.repository.VehicleRepository
+import com.example.cardealer2.repository.PurchaseRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,19 @@ class PaymentsViewModel : ViewModel() {
     
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    
+    // Capital balances
+    private val _cashBalance = MutableStateFlow<Double?>(null)
+    val cashBalance: StateFlow<Double?> = _cashBalance.asStateFlow()
+    
+    private val _bankBalance = MutableStateFlow<Double?>(null)
+    val bankBalance: StateFlow<Double?> = _bankBalance.asStateFlow()
+    
+    private val _creditBalance = MutableStateFlow<Double?>(null)
+    val creditBalance: StateFlow<Double?> = _creditBalance.asStateFlow()
+    
+    private val _isLoadingBalances = MutableStateFlow(false)
+    val isLoadingBalances: StateFlow<Boolean> = _isLoadingBalances.asStateFlow()
 
     data class CustomerDetails(
         val customerName: String,
@@ -79,6 +93,34 @@ class PaymentsViewModel : ViewModel() {
     
     init {
         // No longer auto-loading on init - manual loading only
+        // Load capital balances on init
+        loadCapitalBalances()
+    }
+    
+    /**
+     * Load capital balances for Cash, Bank, and Credit
+     */
+    fun loadCapitalBalances() {
+        viewModelScope.launch {
+            _isLoadingBalances.value = true
+            try {
+                val cashResult = PurchaseRepository.getCapitalBalance("Cash")
+                _cashBalance.value = cashResult.getOrNull() ?: 0.0
+                
+                val bankResult = PurchaseRepository.getCapitalBalance("Bank")
+                _bankBalance.value = bankResult.getOrNull() ?: 0.0
+                
+                val creditResult = PurchaseRepository.getCapitalBalance("Credit")
+                _creditBalance.value = creditResult.getOrNull() ?: 0.0
+            } catch (e: Exception) {
+                // Handle error silently or set to 0
+                _cashBalance.value = 0.0
+                _bankBalance.value = 0.0
+                _creditBalance.value = 0.0
+            } finally {
+                _isLoadingBalances.value = false
+            }
+        }
     }
     
     /**
@@ -242,6 +284,8 @@ class PaymentsViewModel : ViewModel() {
                 onSuccess = {
                     _isLoading.value = false
                     // Sales will automatically update via StateFlow listener
+                    // Refresh capital balances after recording payment
+                    loadCapitalBalances()
                 },
                 onFailure = { exception ->
                     _error.value = exception.message ?: "Failed to record payment"

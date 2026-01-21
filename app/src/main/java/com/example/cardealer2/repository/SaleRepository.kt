@@ -8,6 +8,7 @@ import com.example.cardealer2.data.PersonTransaction
 import com.example.cardealer2.data.TransactionType
 import com.example.cardealer2.data.PersonType
 import com.example.cardealer2.data.PaymentMethod
+import com.example.cardealer2.data.TransactionResult
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
@@ -235,7 +236,7 @@ object SaleRepository {
         rcHandedOver: Boolean = false,
         insuranceHandedOver: Boolean = false,
         otherDocsHandedOver: Boolean = false
-    ): Result<String> {
+    ): Result<TransactionResult> {
         val saleDate = if (date.isBlank()) {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             sdf.format(Date())
@@ -299,7 +300,7 @@ object SaleRepository {
             val isEmi = purchaseType == "EMI"
             
             // Run everything in a single transaction
-            val saleId = db.runTransaction { transaction ->
+            val (saleId, personTransaction) = db.runTransaction { transaction ->
                 // ========== PHASE 1: READ ALL DOCUMENTS FIRST ==========
                 // Firestore requires all reads to complete before any writes
                 
@@ -522,14 +523,20 @@ object SaleRepository {
                                     val updatedVehicles = currentVehicles.toMutableList()
                                     val vehicle = updatedVehicles[vehicleIndex].toMutableMap()
                                     val currentQuantity = (vehicle["quantity"] as? Long)?.toInt() ?: 0
-                                    val newQuantity = maxOf(0, currentQuantity - 1)
+                                    val newQuantity = currentQuantity - 1
                                     
                                     Log.d(TAG, "🔍 Debug - Current quantity: $currentQuantity, New quantity: $newQuantity")
                                     
-                                    vehicle["quantity"] = newQuantity
-                                    updatedVehicles[vehicleIndex] = vehicle
+                                    if (newQuantity > 0) {
+                                        vehicle["quantity"] = newQuantity
+                                        updatedVehicles[vehicleIndex] = vehicle
+                                    } else {
+                                        // If quantity reaches 0, remove the entry from Brand.vehicle
+                                        updatedVehicles.removeAt(vehicleIndex)
+                                    }
+                                    
                                     transaction.update(brandSnap.reference, "vehicle", updatedVehicles)
-                                    Log.d(TAG, "✅ Decremented vehicle quantity for productId: $productId, type: $productType, new quantity: $newQuantity")
+                                    Log.d(TAG, "✅ Decremented vehicle quantity for productId: $productId, type: $productType, new quantity: ${maxOf(0, newQuantity)}")
                                 } else {
                                     Log.e(TAG, "❌ No matching vehicle found in brand. Looking for productId: $productId, type: $productType")
                                     Log.e(TAG, "   Available vehicles:")
@@ -552,6 +559,7 @@ object SaleRepository {
                 } ?: Log.e(TAG, "❌ Product snapshot is null")
                 
                 // 5. Create person transaction record (within the same transaction)
+                var createdPersonTransaction: PersonTransaction? = null
                 customerRef?.let { ref ->
                     val transactionCollection = db.collection("Transactions")
                     // Get customer name from snapshot read in phase 1
@@ -594,14 +602,43 @@ object SaleRepository {
                             "note" to note
                         )
                         transaction.set(saleTransactionRef, saleTransactionData)
+                        
+                        // Build PersonTransaction object for return
+                        createdPersonTransaction = PersonTransaction(
+                            transactionId = saleTransactionRef.id,
+                            type = TransactionType.SALE,
+                            personType = PersonType.CUSTOMER,
+                            personRef = ref,
+                            personName = customerName,
+                            relatedRef = saleDocRef,
+                            amount = transactionAmount,
+                            paymentMethod = PaymentMethod.BANK,
+                            cashAmount = 0.0,
+                            bankAmount = transactionAmount,
+                            creditAmount = 0.0,
+                            date = saleDate,
+                            orderNumber = 0,
+                            transactionNumber = currentTransactionNo,
+                            description = when (purchaseType) {
+                                "FULL_PAYMENT" -> "Vehicle sale - Full payment"
+                                "DOWN_PAYMENT" -> "Vehicle sale - Down payment"
+                                else -> "Vehicle sale"
+                            },
+                            status = "COMPLETED",
+                            createdAt = nowTimestamp.toDate().time,
+                            note = note
+                        )
                     }
                     
                     // For EMI: Create separate transactions for cash and/or bank down payment
                     if (isEmi && downPayment > 0) {
                         // Create Cash transaction if cash down payment exists
+                        var cashTransactionRef: DocumentReference? = null
+                        var cashTransactionNumber: Int? = null
                         if (cashDownPayment > 0) {
                             currentTransactionNo++
-                            val cashTransactionRef = transactionCollection.document()
+                            cashTransactionRef = transactionCollection.document()
+                            cashTransactionNumber = currentTransactionNo
                             
                             val cashTransactionData = hashMapOf<String, Any>(
                                 "transactionId" to cashTransactionRef.id,
@@ -624,6 +661,30 @@ object SaleRepository {
                                 "note" to note
                             )
                             transaction.set(cashTransactionRef, cashTransactionData)
+                            
+                            // Use cash transaction as primary if it exists
+                            if (createdPersonTransaction == null) {
+                                createdPersonTransaction = PersonTransaction(
+                                    transactionId = cashTransactionRef.id,
+                                    type = TransactionType.SALE,
+                                    personType = PersonType.CUSTOMER,
+                                    personRef = ref,
+                                    personName = customerName,
+                                    relatedRef = saleDocRef,
+                                    amount = cashDownPayment,
+                                    paymentMethod = PaymentMethod.CASH,
+                                    cashAmount = cashDownPayment,
+                                    bankAmount = 0.0,
+                                    creditAmount = 0.0,
+                                    date = saleDate,
+                                    orderNumber = 0,
+                                    transactionNumber = currentTransactionNo,
+                                    description = "Vehicle sale - EMI down payment (Cash)",
+                                    status = "COMPLETED",
+                                    createdAt = nowTimestamp.toDate().time,
+                                    note = note
+                                )
+                            }
                         }
                         
                         // Create Bank transaction if bank down payment exists
@@ -652,6 +713,30 @@ object SaleRepository {
                                 "note" to note
                             )
                             transaction.set(bankTransactionRef, bankTransactionData)
+                            
+                            // Use bank transaction as primary if cash doesn't exist
+                            if (createdPersonTransaction == null) {
+                                createdPersonTransaction = PersonTransaction(
+                                    transactionId = bankTransactionRef.id,
+                                    type = TransactionType.SALE,
+                                    personType = PersonType.CUSTOMER,
+                                    personRef = ref,
+                                    personName = customerName,
+                                    relatedRef = saleDocRef,
+                                    amount = bankDownPayment,
+                                    paymentMethod = PaymentMethod.BANK,
+                                    cashAmount = 0.0,
+                                    bankAmount = bankDownPayment,
+                                    creditAmount = 0.0,
+                                    date = saleDate,
+                                    orderNumber = 0,
+                                    transactionNumber = currentTransactionNo,
+                                    description = "Vehicle sale - EMI down payment (Bank)",
+                                    status = "COMPLETED",
+                                    createdAt = nowTimestamp.toDate().time,
+                                    note = note
+                                )
+                            }
                         }
                     }
                 }
@@ -659,12 +744,40 @@ object SaleRepository {
                 // Update maxTransactionNo with the final value
                 transaction.update(maxTransactionNoDocRefLocal, "maxTransactionNo", currentTransactionNo)
                 
-                // Return sale ID
-                saleIdValue
+                // Return sale ID and transaction (or null if no transaction was created)
+                Pair(saleIdValue, createdPersonTransaction)
             }.await()
             
             Log.d(TAG, "✅ Sale created atomically with ID: $saleId")
-            Result.success(saleId)
+            
+            // If no transaction was created (shouldn't happen, but handle gracefully)
+            val transaction = personTransaction ?: PersonTransaction(
+                transactionId = "",
+                type = TransactionType.SALE,
+                personType = PersonType.CUSTOMER,
+                personRef = customerRef,
+                personName = "",
+                relatedRef = null,
+                amount = if (purchaseType == "EMI") downPayment else (if (purchaseType == "FULL_PAYMENT") totalAmount else downPayment),
+                paymentMethod = if (purchaseType == "EMI" && cashDownPayment > 0) PaymentMethod.CASH else PaymentMethod.BANK,
+                cashAmount = if (purchaseType == "EMI") cashDownPayment else 0.0,
+                bankAmount = if (purchaseType == "EMI") bankDownPayment else (if (purchaseType == "FULL_PAYMENT") totalAmount else downPayment),
+                creditAmount = 0.0,
+                date = saleDate,
+                orderNumber = null,
+                transactionNumber = null,
+                description = when (purchaseType) {
+                    "FULL_PAYMENT" -> "Vehicle sale - Full payment"
+                    "DOWN_PAYMENT" -> "Vehicle sale - Down payment"
+                    "EMI" -> "Vehicle sale - EMI down payment"
+                    else -> "Vehicle sale"
+                },
+                status = "COMPLETED",
+                createdAt = System.currentTimeMillis(),
+                note = note
+            )
+            
+            Result.success(TransactionResult(saleId, transaction))
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error adding sale: ${e.message}", e)
             Result.failure(e)
@@ -773,6 +886,25 @@ object SaleRepository {
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error getting EmiDetails: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get VehicleSale by DocumentReference
+     */
+    suspend fun getVehicleSaleByReference(saleRef: DocumentReference): Result<VehicleSale> {
+        return try {
+            val doc = saleRef.get().await()
+            if (doc.exists()) {
+                val sale = docToVehicleSale(doc)
+                    ?: return Result.failure(Exception("Failed to parse VehicleSale data"))
+                Result.success(sale)
+            } else {
+                Result.failure(Exception("VehicleSale not found"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error getting VehicleSale by reference: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -983,9 +1115,23 @@ object SaleRepository {
                 var newPaidInstallments = currentPaidInstallments
                 var newRemainingInstallments = currentRemainingInstallments
                 var newNextDueDate = currentNextDueDate
-                var newLastPaidDate: Long? = currentLastPaidDate  // Initialize with current value from database
+                var newLastPaidDate: Long? = currentLastPaidDate
                 var customerAmountChange = 0.0
                 
+                // ALWAYS decrement remaining installments by 1 when payment is recorded
+                // regardless of payment amount
+                newPaidInstallments += 1
+                newRemainingInstallments -= 1
+                
+                // Always update lastPaidDate to payment date
+                newLastPaidDate = paymentDate
+                
+                // Calculate next due date if there are still remaining installments
+                if (newRemainingInstallments > 0) {
+                    newNextDueDate = calculateNextDueDate(currentNextDueDate, frequency)
+                }
+                
+                // Handle payment amount logic (affects customer balance and pendingExtraBalance)
                 if (totalAvailable < installmentAmount) {
                     // Total available (pending balance + payment) is less than required
                     val remainingAmount = installmentAmount - totalAvailable
@@ -995,26 +1141,12 @@ object SaleRepository {
                     
                     // Add remaining amount to customer.amount (customer owes more)
                     customerAmountChange = remainingAmount
-                    
-                    // Do NOT increment paidInstallments or update dates
-                    // Keep lastPaidDate unchanged (don't update it in the map)
                 } else {
                     // Total available (pending balance + payment) is equal to or more than required
                     val excessAmount = totalAvailable - installmentAmount
                     
                     // Subtract excess from customer.amount (customer owes less)
                     customerAmountChange = -excessAmount
-                    
-                    // Step 4: Increment paidInstallments and decrement remainingInstallments
-                    newPaidInstallments += 1
-                    newRemainingInstallments -= 1
-                    
-                    // Step 3: Shift nextDueDate and lastPaidDate (payment was successful)
-                    newLastPaidDate = paymentDate
-                    if (newRemainingInstallments > 0) {
-                        // Calculate next due date based on frequency
-                        newNextDueDate = calculateNextDueDate(currentNextDueDate, frequency)
-                    }
                     
                     // If there's excess, add it to pendingExtraBalance for future installments
                     newPendingExtraBalance = excessAmount
@@ -1028,10 +1160,8 @@ object SaleRepository {
                     "nextDueDate" to Timestamp(Date(newNextDueDate))
                 )
                 
-                // Update lastPaidDate only if payment was sufficient (installment was completed)
-                // When payment is insufficient, newLastPaidDate remains as currentLastPaidDate,
-                // but we don't want to update it in the database (keep existing value)
-                if (totalAvailable >= installmentAmount && newLastPaidDate != null) {
+                // Always update lastPaidDate since we're always counting it as a payment
+                if (newLastPaidDate != null) {
                     emiUpdateMap["lastPaidDate"] = Timestamp(Date(newLastPaidDate))
                 }
                 

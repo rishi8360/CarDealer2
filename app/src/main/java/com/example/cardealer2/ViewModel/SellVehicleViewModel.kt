@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.cardealer2.data.Customer
 import com.example.cardealer2.data.EmiDetails
 import com.example.cardealer2.data.Product
+import com.example.cardealer2.data.PersonTransaction
+import com.example.cardealer2.data.TransactionResult
 import com.example.cardealer2.repository.CustomerRepository
 import com.example.cardealer2.repository.SaleRepository
 import com.example.cardealer2.repository.VehicleRepository
@@ -68,6 +70,10 @@ class SellVehicleViewModel : ViewModel() {
     
     private val _success = MutableStateFlow(false)
     val success: StateFlow<Boolean> = _success.asStateFlow()
+    
+    // Created transaction after sale success
+    private val _createdTransaction = MutableStateFlow<PersonTransaction?>(null)
+    val createdTransaction: StateFlow<PersonTransaction?> = _createdTransaction.asStateFlow()
     
     // Customers list for selection
     private val _customers = MutableStateFlow<List<Customer>>(emptyList())
@@ -403,7 +409,8 @@ class SellVehicleViewModel : ViewModel() {
                     )
                     
                     result.fold(
-                        onSuccess = {
+                        onSuccess = { transactionResult ->
+                            _createdTransaction.value = transactionResult.transaction
                             _success.value = true
                             _isLoading.value = false
                         },
@@ -485,7 +492,8 @@ class SellVehicleViewModel : ViewModel() {
                     )
                     
                     result.fold(
-                        onSuccess = {
+                        onSuccess = { transactionResult ->
+                            _createdTransaction.value = transactionResult.transaction
                             _success.value = true
                             _isLoading.value = false
                         },
@@ -516,6 +524,7 @@ class SellVehicleViewModel : ViewModel() {
         _bankDownPayment.value = ""
         _error.value = null
         _success.value = false
+        _createdTransaction.value = null
         _nocHandedOver.value = false
         _rcHandedOver.value = false
         _insuranceHandedOver.value = false

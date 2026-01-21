@@ -24,6 +24,9 @@ object AppPreferences {
     private val COMPANY_EMAIL_KEY = stringPreferencesKey("company_email")
     private val COMPANY_GSTIN_KEY = stringPreferencesKey("company_gstin")
     
+    // Price password key
+    private val PRICE_PASSWORD_KEY = stringPreferencesKey("price_password")
+    
     fun isPunjabiEnabled(context: Context): Flow<Boolean> {
         return context.dataStore.data.map { preferences ->
             preferences[PUNJABI_ENABLED_KEY] ?: false
@@ -79,6 +82,32 @@ object AppPreferences {
             email = preferences[COMPANY_EMAIL_KEY] ?: "",
             gstin = preferences[COMPANY_GSTIN_KEY] ?: ""
         )
+    }
+    
+    /**
+     * Save price password to local cache
+     */
+    suspend fun savePricePassword(context: Context, password: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PRICE_PASSWORD_KEY] = password
+        }
+    }
+    
+    /**
+     * Get price password from local cache (Flow)
+     */
+    fun getPricePassword(context: Context): Flow<String> {
+        return context.dataStore.data.map { preferences ->
+            preferences[PRICE_PASSWORD_KEY] ?: ""
+        }
+    }
+    
+    /**
+     * Get price password synchronously (for immediate access)
+     */
+    suspend fun getPricePasswordSync(context: Context): String {
+        val preferences = context.dataStore.data.first()
+        return preferences[PRICE_PASSWORD_KEY] ?: ""
     }
 }
 

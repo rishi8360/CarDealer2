@@ -43,6 +43,7 @@ android {
 
 dependencies {
 
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -54,6 +55,7 @@ dependencies {
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.animation)
     implementation(libs.foundation)
+    implementation(libs.androidx.ui.text)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -103,6 +105,7 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata:1.9.3")
 
     // DataStore for preferences
+
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
 
