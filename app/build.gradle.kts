@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cardealer2"
+    namespace = "com.humbleSolutions.cardealer2"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.cardealer2"
+        applicationId = "com.humbleSolutions.cardealer2"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
